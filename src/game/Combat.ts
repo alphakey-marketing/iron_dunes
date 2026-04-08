@@ -1,0 +1,85 @@
+import type { Item, BodyParts } from '../types';
+
+type BodyPartKey = keyof BodyParts;
+
+const HIT_LOCATIONS: Array<{ part: BodyPartKey; weight: number }> = [
+  { part: 'head', weight: 0.10 },
+  { part: 'chest', weight: 0.25 },
+  { part: 'stomach', weight: 0.20 },
+  { part: 'leftArm', weight: 0.10 },
+  { part: 'rightArm', weight: 0.10 },
+  { part: 'leftLeg', weight: 0.125 },
+  { part: 'rightLeg', weight: 0.125 },
+];
+
+function randomHitLocation(): BodyPartKey {
+  const roll = Math.random();
+  let cumulative = 0;
+  for (const loc of HIT_LOCATIONS) {
+    cumulative += loc.weight;
+    if (roll < cumulative) return loc.part;
+  }
+  return 'chest';
+}
+
+function rand(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
+
+function getWeaponStats(weapon: Item | null): { baseDamage: number; attackBonus: number } {
+  if (!weapon) return { baseDamage: 4, attackBonus: 0 };
+  return {
+    baseDamage: weapon.baseDamage ?? 4,
+    attackBonus: weapon.attackBonus ?? 0,
+  };
+}
+
+function getArmourStats(armour: Item | null): { defenceBonus: number; damageReduction: number } {
+  if (!armour) return { defenceBonus: 0, damageReduction: 0 };
+  return {
+    defenceBonus: armour.defenceBonus ?? 0,
+    damageReduction: armour.damageReduction ?? 0,
+  };
+}
+
+export interface Combatant {
+  id: string;
+  skills: { melee: number; defence: number; strength: number; [key: string]: number };
+  bodyParts: BodyParts;
+  weapon: Item | null;
+  armour: Item | null;
+  status: string;
+}
+
+export function resolveCombatTick(attacker: Combatant, defender: Combatant): void {
+  const weapon = getWeaponStats(attacker.weapon);
+  const armour = getArmourStats(defender.armour);
+
+  const attackRoll = attacker.skills.melee + weapon.attackBonus + rand(-10, 10);
+  const defenceRoll = defender.skills.defence + armour.defenceBonus + rand(-5, 5);
+
+  if (attackRoll > defenceRoll) {
+    const rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);
+    const finalDamage = rawDamage * (1 - armour.damageReduction);
+    const part = randomHitLocation();
+
+    defender.bodyParts[part] = Math.max(0, defender.bodyParts[part] - finalDamage);
+
+    attacker.skills.melee = Math.min(100, attacker.skills.melee + 0.5);
+    defender.skills.defence = Math.min(100, defender.skills.defence + 0.4);
+  } else {
+    defender.skills.defence = Math.min(100, defender.skills.defence + 0.2);
+  }
+}
+
+export function applyBodyPartEffects(combatant: Combatant): void {
+  if (combatant.bodyParts.head <= 0 || combatant.bodyParts.chest <= 0 || combatant.bodyParts.stomach <= 0) {
+    if (combatant.status !== 'dead' && combatant.status !== 'unconscious') {
+      combatant.status = 'unconscious';
+    }
+  }
+  const total = Object.values(combatant.bodyParts).reduce((a, b) => a + b, 0);
+  if (total <= 0) {
+    combatant.status = 'dead';
+  }
+}
