@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import type { Character as CharData, Enemy, LootContainer } from '../types';
+import type { Character as CharData, Enemy, LootContainer, Vendor } from '../types';
 import { TILE_SIZE } from '../data/map';
 
 const CHAR_RADIUS = 10;
@@ -9,6 +9,7 @@ const HEALTH_BAR_HEIGHT = 3;
 const COLORS = {
   player: 0x4F98A3,
   enemy: 0xE84040,
+  vendor: 0x88CCAA,
   unconscious: 0x888888,
   selected: 0xFFFF00,
   loot: 0xF0C040,
@@ -26,6 +27,7 @@ export class CharRenderer {
   private charLayer: PIXI.Container;
   private charSprites: Map<string, CharSprite> = new Map();
   private lootSprites: Map<string, PIXI.Graphics> = new Map();
+  private vendorSprites: Map<string, PIXI.Container> = new Map();
 
   constructor(parent: PIXI.Container) {
     this.charLayer = new PIXI.Container();
@@ -58,10 +60,35 @@ export class CharRenderer {
     }
   }
 
+  private getOrCreateVendorSprite(vendor: Vendor): PIXI.Container {
+    if (this.vendorSprites.has(vendor.id)) return this.vendorSprites.get(vendor.id)!;
+
+    const container = new PIXI.Container();
+    const body = new PIXI.Graphics();
+    body.circle(0, 0, CHAR_RADIUS);
+    body.fill({ color: COLORS.vendor });
+    body.circle(0, 0, CHAR_RADIUS);
+    body.stroke({ color: 0xffffff, alpha: 0.5, width: 1.5 });
+    container.addChild(body);
+
+    const label = new PIXI.Text({
+      text: vendor.name,
+      style: { fontSize: 8, fill: 0xffffff, fontFamily: 'monospace' },
+    });
+    label.anchor.set(0.5, 0);
+    label.y = CHAR_RADIUS + 2;
+    container.addChild(label);
+
+    this.charLayer.addChild(container);
+    this.vendorSprites.set(vendor.id, container);
+    return container;
+  }
+
   update(
     squad: CharData[],
     enemies: Enemy[],
     loot: LootContainer[],
+    vendors: Vendor[],
     selectedId: string | null
   ): void {
     const activeIds = new Set<string>();
@@ -107,6 +134,21 @@ export class CharRenderer {
     for (const [id] of this.charSprites) {
       if (!activeIds.has(id)) {
         this.removeSprite(id);
+      }
+    }
+
+    // Vendor sprites (static NPCs)
+    const activeVendorIds = new Set<string>();
+    for (const vendor of vendors) {
+      activeVendorIds.add(vendor.id);
+      const sprite = this.getOrCreateVendorSprite(vendor);
+      sprite.x = vendor.x * TILE_SIZE;
+      sprite.y = vendor.y * TILE_SIZE;
+    }
+    for (const [id, sprite] of this.vendorSprites) {
+      if (!activeVendorIds.has(id)) {
+        this.charLayer.removeChild(sprite);
+        this.vendorSprites.delete(id);
       }
     }
 

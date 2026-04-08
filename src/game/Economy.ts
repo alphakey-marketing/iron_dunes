@@ -47,6 +47,61 @@ export function createVendor(id: string, name: string, x: number, y: number): Ve
   };
 }
 
+export function createGeneralTrader(id: string, x: number, y: number): Vendor {
+  return {
+    id,
+    name: 'General Trader',
+    x,
+    y,
+    inventory: [
+      { ...ITEMS.driedRation },
+      { ...ITEMS.driedRation },
+      { ...ITEMS.driedRation },
+      { ...ITEMS.cactusFruit },
+      { ...ITEMS.cactusFruit },
+      { ...ITEMS.cookedMeat },
+      { ...ITEMS.cookedMeat },
+      { ...ITEMS.medicalKit },
+      { ...ITEMS.medicalKit },
+    ],
+    buys: ['weapon', 'armour', 'scrap'],
+  };
+}
+
+export function createArmourSmith(id: string, x: number, y: number): Vendor {
+  return {
+    id,
+    name: 'Armour Smith',
+    x,
+    y,
+    inventory: [
+      { ...ITEMS.leatherVest },
+      { ...ITEMS.leatherVest },
+      { ...ITEMS.dustcoat },
+      { ...ITEMS.dustcoat },
+      { ...ITEMS.ironPlate },
+    ],
+    buys: ['armour', 'scrap'],
+  };
+}
+
+export function createWeaponsDealer(id: string, x: number, y: number): Vendor {
+  return {
+    id,
+    name: 'Weapons Dealer',
+    x,
+    y,
+    inventory: [
+      { ...ITEMS.rustySword },
+      { ...ITEMS.rustySword },
+      { ...ITEMS.ironClub },
+      { ...ITEMS.shortsword },
+      { ...ITEMS.shortsword },
+    ],
+    buys: ['weapon', 'scrap'],
+  };
+}
+
 export function buyItem(vendor: Vendor, itemId: string, playerCats: number, playerBackpack: Item[]): {
   success: boolean;
   newCats: number;
@@ -122,6 +177,19 @@ export function generateEnemyLoot(enemy: Enemy): Item[] {
   if (enemy.armour) loot.push({ ...enemy.armour });
   if (Math.random() < 0.4) loot.push({ ...ITEMS.scrapMetal });
   if (Math.random() < 0.3) loot.push({ ...ITEMS.driedRation });
+  if (Math.random() < 0.15) loot.push({ ...ITEMS.medicalKit });
+  // Cats drop as a scrap-like item represented as extra cats via loot value
+  return loot;
+}
+
+export function generateRuinLoot(): Item[] {
+  const loot: Item[] = [];
+  const roll1 = Math.random();
+  if (roll1 < 0.4) loot.push({ ...ITEMS.driedRation });
+  if (Math.random() < 0.3) loot.push({ ...ITEMS.scrapMetal });
+  if (Math.random() < 0.15) loot.push({ ...ITEMS.medicalKit });
+  if (Math.random() < 0.1) loot.push({ ...ITEMS.rustySword });
+  if (Math.random() < 0.08) loot.push({ ...ITEMS.dustcoat });
   return loot;
 }
 

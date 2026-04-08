@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import type { GameState } from '../types';
 import type { World } from '../game/World';
 import type { Squad } from '../game/Squad';
-import { createVendor, buyItem, sellItem, generateBounties, generateRecruits, openLootContainer } from '../game/Economy';
+import { createGeneralTrader, createArmourSmith, createWeaponsDealer, buyItem, sellItem, generateBounties, generateRecruits, openLootContainer } from '../game/Economy';
 import { createCharacter } from '../game/Character';
 import { POI } from '../data/map';
 
 const initialVendors = [
-  createVendor('vendor_1', 'Old Sump Trader', POI.town.x, POI.town.y),
+  createGeneralTrader('vendor_1', POI.town.x - 1, POI.town.y - 1),
+  createArmourSmith('vendor_2', POI.town.x + 1, POI.town.y - 1),
+  createWeaponsDealer('vendor_3', POI.town.x, POI.town.y + 1),
 ];
 
 const initialBounties = generateBounties(1);
@@ -50,6 +52,10 @@ interface GameActions {
   acceptBounty: (bountyId: string) => void;
   recruitMember: (recruitId: string) => void;
   openLoot: (containerId: string, charId: string) => void;
+  equipItem: (charId: string, itemIdx: number) => void;
+  unequipWeapon: (charId: string) => void;
+  unequipArmour: (charId: string) => void;
+  incrementBountyKills: (count: number) => void;
 }
 
 let squadRef: Squad | null = null;
@@ -144,6 +150,57 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
     openLootContainer(container, char);
     set({ lootContainers: [...state.lootContainers] });
+  },
+
+  equipItem: (charId, itemIdx) => {
+    const char = squadRef?.getById(charId);
+    if (!char) return;
+    const item = char.backpack[itemIdx];
+    if (!item) return;
+
+    if (item.type === 'weapon') {
+      if (char.weapon) char.backpack.push({ ...char.weapon });
+      char.weapon = item;
+      char.backpack.splice(itemIdx, 1);
+    } else if (item.type === 'armour') {
+      if (char.armour) char.backpack.push({ ...char.armour });
+      char.armour = item;
+      char.backpack.splice(itemIdx, 1);
+    }
+    set({ squad: [...(squadRef?.characters ?? [])] });
+  },
+
+  unequipWeapon: (charId) => {
+    const char = squadRef?.getById(charId);
+    if (!char || !char.weapon) return;
+    char.backpack.push({ ...char.weapon });
+    char.weapon = null;
+    set({ squad: [...(squadRef?.characters ?? [])] });
+  },
+
+  unequipArmour: (charId) => {
+    const char = squadRef?.getById(charId);
+    if (!char || !char.armour) return;
+    char.backpack.push({ ...char.armour });
+    char.armour = null;
+    set({ squad: [...(squadRef?.characters ?? [])] });
+  },
+
+  incrementBountyKills: (count) => {
+    const state = get();
+    const bounties = state.bounties.map(b => {
+      if (b.type === 'banditHunt' && !b.completed && b.currentCount !== undefined && b.targetCount !== undefined) {
+        const newCount = b.currentCount + count;
+        const completed = newCount >= b.targetCount;
+        const reward = completed ? b.reward : 0;
+        if (completed) {
+          useGameStore.setState({ cats: state.cats + reward });
+        }
+        return { ...b, currentCount: Math.min(newCount, b.targetCount), completed };
+      }
+      return b;
+    });
+    set({ bounties });
   },
 }));
 

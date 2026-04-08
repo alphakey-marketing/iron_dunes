@@ -1,6 +1,6 @@
 import type { Enemy, LootContainer } from '../types';
 import { spawnBanditCamp } from '../data/enemies';
-import { createLootContainer, generateEnemyLoot } from './Economy';
+import { createLootContainer, generateEnemyLoot, generateRuinLoot } from './Economy';
 import { POI } from '../data/map';
 
 const DAY_CYCLE = 600;
@@ -15,12 +15,27 @@ export class World {
 
   constructor() {
     this.spawnInitialEnemies();
+    this.spawnRuinLoot();
   }
 
   private spawnInitialEnemies(): void {
     for (const camp of POI.banditCamps) {
       const bandits = spawnBanditCamp(camp.x, camp.y, 3);
       this.enemies.push(...bandits);
+    }
+  }
+
+  private spawnRuinLoot(): void {
+    for (const ruin of POI.ruinSites) {
+      const count = 1 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        const ox = Math.floor((Math.random() - 0.5) * 4);
+        const oy = Math.floor((Math.random() - 0.5) * 4);
+        const items = generateRuinLoot();
+        if (items.length > 0) {
+          this.lootContainers.push(createLootContainer(ruin.x + ox, ruin.y + oy, items));
+        }
+      }
     }
   }
 
