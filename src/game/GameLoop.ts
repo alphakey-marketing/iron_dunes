@@ -53,6 +53,7 @@ export class GameLoop {
     const delta = rawDelta * this.timeScale;
 
     if (this.timeScale > 0) {
+      this.updateMovement(delta);
       this.world.update(delta);
       this.squad.update(delta);
       this.ai.update(this.world.enemies, this.squad.characters, delta, this.world.isNight);
@@ -66,5 +67,25 @@ export class GameLoop {
     }
 
     this.rafId = requestAnimationFrame(this.tick.bind(this));
+  }
+
+  private updateMovement(delta: number): void {
+    for (const char of this.squad.characters) {
+      if (char.targetX === null || char.targetY === null) continue;
+      const dx = char.targetX - char.x;
+      const dy = char.targetY - char.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 0.1) {
+        char.x = char.targetX;
+        char.y = char.targetY;
+        char.targetX = null;
+        char.targetY = null;
+        char.status = 'idle';
+      } else {
+        char.x += (dx / d) * char.moveSpeed * delta;
+        char.y += (dy / d) * char.moveSpeed * delta;
+        char.status = 'moving';
+      }
+    }
   }
 }

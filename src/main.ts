@@ -39,29 +39,6 @@ async function main(): Promise<void> {
 
   gameLoop.start();
 
-  setInterval(() => {
-    const delta = 0.016;
-    for (const char of squad.characters) {
-      if (char.targetX !== null && char.targetY !== null) {
-        const dx = char.targetX - char.x;
-        const dy = char.targetY - char.y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < 0.1) {
-          char.x = char.targetX;
-          char.y = char.targetY;
-          char.targetX = null;
-          char.targetY = null;
-          char.status = 'idle';
-        } else {
-          const speed = char.moveSpeed;
-          char.x += (dx / d) * speed * delta;
-          char.y += (dy / d) * speed * delta;
-          char.status = 'moving';
-        }
-      }
-    }
-  }, 16);
-
   function renderLoop(): void {
     const state = useGameStore.getState();
     renderer.update(state.squad, state.enemies, state.lootContainers, state.selectedCharId);
