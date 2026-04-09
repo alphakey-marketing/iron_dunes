@@ -76,8 +76,11 @@ export function resolveCombatTick(attacker: Combatant, defender: Combatant): voi
 
   if (attackRoll > defenceRoll) {
     let rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);
-    if (armWeakened) rawDamage *= 0.7;
-    if (chestWeakened) rawDamage *= 0.7;
+    // Additive penalties: each weakened/crippled part reduces damage by 30% (GDD §4.3)
+    let damagePenalty = 0;
+    if (armWeakened) damagePenalty += 0.3;
+    if (chestWeakened) damagePenalty += 0.3;
+    rawDamage *= Math.max(0, 1 - damagePenalty);
     const finalDamage = rawDamage * (1 - armour.damageReduction);
     const part = randomHitLocation();
 

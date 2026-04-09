@@ -185,7 +185,7 @@ export class CharRenderer {
     for (const target of escortTargets) {
       const wx = target.x * TILE_SIZE;
       const wy = target.y * TILE_SIZE;
-      // Outer pulsing ring
+      // Outer ring
       this.escortMarkerGfx.circle(wx, wy, TILE_SIZE * 0.8);
       this.escortMarkerGfx.stroke({ color: 0xf0c040, alpha: 0.8, width: 2 });
       // Inner dot
