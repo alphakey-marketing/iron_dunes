@@ -6,6 +6,7 @@ import { syncToStore, useGameStore } from '../store/gameStore';
 import type { Character as CharData } from '../types';
 
 const UI_SYNC_INTERVAL = 0.1;
+const ESCORT_COMPLETION_DISTANCE = 3;
 
 export class GameLoop {
   private world: World;
@@ -125,7 +126,7 @@ export class GameLoop {
       if (char.status === 'dead' || char.status === 'unconscious') continue;
       for (const bounty of activeEscorts) {
         const d = Math.sqrt((char.x - bounty.targetX!) ** 2 + (char.y - bounty.targetY!) ** 2);
-        if (d <= 3) {
+        if (d <= ESCORT_COMPLETION_DISTANCE) {
           useGameStore.getState().completeEscortBounty(bounty.id);
         }
       }

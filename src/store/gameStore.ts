@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { GameState } from '../types';
 import type { World } from '../game/World';
 import type { Squad } from '../game/Squad';
-import { createGeneralTrader, createArmourSmith, createWeaponsDealer, buyItem, sellItem, generateBounties, generateRecruits, openLootContainer } from '../game/Economy';
+import { createGeneralTrader, createArmourSmith, createWeaponsDealer, buyItem, sellItem, generateBounties, generateRecruits, openLootContainer, BANDIT_CAMP_LOOT_RADIUS } from '../game/Economy';
 import { createCharacter, useMedicalKit } from '../game/Character';
 import { POI } from '../data/map';
 import type { Character as CharData } from '../types';
@@ -163,7 +163,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     // Check campRaid bounty completion (container near a bandit camp)
     const nearBanditCamp = POI.banditCamps.some(camp => {
       const d = Math.sqrt((container.x - camp.x) ** 2 + (container.y - camp.y) ** 2);
-      return d <= 10;
+      return d <= BANDIT_CAMP_LOOT_RADIUS;
     });
 
     let extraCats = catsGained;

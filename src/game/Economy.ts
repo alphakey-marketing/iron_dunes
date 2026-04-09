@@ -172,6 +172,14 @@ export function generateRecruits(day: number): Recruit[] {
   });
 }
 
+export const BANDIT_CAMP_LOOT_RADIUS = 10;
+
+const MIN_CATS_DROP = 50;
+const MAX_CATS_DROP = 300;
+const CATS_DROP_CHANCE = 0.6;
+const STRENGTH_GAIN_PER_HEAVY_ITEM = 0.2;
+const HEAVY_ITEM_THRESHOLD = 5;
+
 export function generateEnemyLoot(enemy: Enemy): Item[] {
   const loot: Item[] = [];
   if (enemy.weapon) loot.push({ ...enemy.weapon });
@@ -179,8 +187,8 @@ export function generateEnemyLoot(enemy: Enemy): Item[] {
   if (Math.random() < 0.4) loot.push({ ...ITEMS.scrapMetal });
   if (Math.random() < 0.3) loot.push({ ...ITEMS.driedRation });
   if (Math.random() < 0.15) loot.push({ ...ITEMS.medicalKit });
-  if (Math.random() < 0.6) {
-    const amount = 50 + Math.floor(Math.random() * 251); // 50–300 cats
+  if (Math.random() < CATS_DROP_CHANCE) {
+    const amount = MIN_CATS_DROP + Math.floor(Math.random() * (MAX_CATS_DROP - MIN_CATS_DROP + 1));
     loot.push(makeCatsPouch(amount));
   }
   return loot;
@@ -215,9 +223,8 @@ export function openLootContainer(container: LootContainer, char: CharData): Ite
   for (const item of taken) {
     if (item.type !== 'currency') {
       char.backpack.push(item);
-      // Strength improves when picking up heavy items
-      if (item.weight > 5) {
-        char.skills.strength = Math.min(100, char.skills.strength + 0.2);
+      if (item.weight > HEAVY_ITEM_THRESHOLD) {
+        char.skills.strength = Math.min(100, char.skills.strength + STRENGTH_GAIN_PER_HEAVY_ITEM);
       }
     }
   }
