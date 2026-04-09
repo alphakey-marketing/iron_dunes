@@ -23,7 +23,6 @@ export class Renderer {
   private onEntityClick?: (event: EntityClickEvent) => void;
 
   // Snapshot of entities for click detection (updated each frame)
-  private squadSnapshot: CharData[] = [];
   private enemiesSnapshot: Enemy[] = [];
   private lootSnapshot: LootContainer[] = [];
   private vendorsSnapshot: Vendor[] = [];
@@ -173,7 +172,6 @@ export class Renderer {
     timeOfDay: number,
     isNight: boolean,
   ): void {
-    this.squadSnapshot = squad;
     this.enemiesSnapshot = enemies;
     this.lootSnapshot = loot;
     this.vendorsSnapshot = vendors;

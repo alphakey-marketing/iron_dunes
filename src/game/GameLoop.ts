@@ -102,6 +102,8 @@ export class GameLoop {
       }
     }
   }
+
+  private trackBanditKills(): void {
     const justDied = this.world.enemies.filter(
       e => e.status === 'dead' && e.faction === 'bandit'
     );
