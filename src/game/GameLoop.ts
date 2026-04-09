@@ -61,6 +61,7 @@ export class GameLoop {
       this.updatePlayerCombat(delta);
       this.ai.update(this.world.enemies, this.squad.characters, delta, this.world.isNight);
       this.trackBanditKills();
+      this.checkEscortBounties();
       this.world.cleanDeadEnemies();
     }
 
@@ -109,6 +110,25 @@ export class GameLoop {
     );
     if (justDied.length > 0) {
       useGameStore.getState().incrementBountyKills(justDied.length);
+    }
+  }
+
+  private checkEscortBounties(): void {
+    const state = useGameStore.getState();
+    const activeEscorts = state.bounties.filter(
+      b => b.type === 'escort' && b.accepted && !b.completed &&
+           b.targetX !== undefined && b.targetY !== undefined
+    );
+    if (activeEscorts.length === 0) return;
+
+    for (const char of this.squad.characters) {
+      if (char.status === 'dead' || char.status === 'unconscious') continue;
+      for (const bounty of activeEscorts) {
+        const d = Math.sqrt((char.x - bounty.targetX!) ** 2 + (char.y - bounty.targetY!) ** 2);
+        if (d <= 3) {
+          useGameStore.getState().completeEscortBounty(bounty.id);
+        }
+      }
     }
   }
 

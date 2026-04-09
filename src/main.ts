@@ -73,6 +73,12 @@ async function main(): Promise<void> {
     if (e.code === 'KeyP' || e.code === 'Escape') {
       useGameStore.getState().togglePause();
     }
+    if (e.code === 'KeyB') {
+      useGameStore.getState().openBountyBoard();
+    }
+    if (e.code === 'KeyR') {
+      useGameStore.getState().openRecruit();
+    }
   });
 
   const gameLoop = new GameLoop(world, squad);

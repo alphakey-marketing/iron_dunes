@@ -3,8 +3,9 @@ import type { GameState } from '../types';
 import type { World } from '../game/World';
 import type { Squad } from '../game/Squad';
 import { createGeneralTrader, createArmourSmith, createWeaponsDealer, buyItem, sellItem, generateBounties, generateRecruits, openLootContainer } from '../game/Economy';
-import { createCharacter } from '../game/Character';
+import { createCharacter, useMedicalKit } from '../game/Character';
 import { POI } from '../data/map';
+import type { Character as CharData } from '../types';
 
 const initialVendors = [
   createGeneralTrader('vendor_1', POI.town.x - 1, POI.town.y - 1),
@@ -56,6 +57,8 @@ interface GameActions {
   unequipWeapon: (charId: string) => void;
   unequipArmour: (charId: string) => void;
   incrementBountyKills: (count: number) => void;
+  completeEscortBounty: (bountyId: string) => void;
+  useMedKit: (charId: string, part: keyof CharData['bodyParts']) => void;
 }
 
 let squadRef: Squad | null = null;
@@ -120,7 +123,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   acceptBounty: (bountyId) => {
     const state = get();
     const bounties = state.bounties.map(b =>
-      b.id === bountyId ? { ...b } : b
+      b.id === bountyId ? { ...b, accepted: true } : b
     );
     set({ bounties });
   },
@@ -148,8 +151,31 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     const char = squadRef?.getById(charId);
     if (!char) return;
 
+    // openLootContainer now skips currency items — collect them separately
+    const rawItems = [...container.items];
     openLootContainer(container, char);
-    set({ lootContainers: [...state.lootContainers] });
+
+    // Convert any currency items to cats balance
+    const catsGained = rawItems
+      .filter(item => item.type === 'currency')
+      .reduce((sum, item) => sum + item.buyPrice, 0);
+
+    // Check campRaid bounty completion (container near a bandit camp)
+    const nearBanditCamp = POI.banditCamps.some(camp => {
+      const d = Math.sqrt((container.x - camp.x) ** 2 + (container.y - camp.y) ** 2);
+      return d <= 10;
+    });
+
+    let extraCats = catsGained;
+    const bounties = state.bounties.map(b => {
+      if (b.type === 'campRaid' && b.accepted && !b.completed && nearBanditCamp) {
+        extraCats += b.reward;
+        return { ...b, completed: true };
+      }
+      return b;
+    });
+
+    set({ lootContainers: [...state.lootContainers], cats: state.cats + extraCats, bounties });
   },
 
   equipItem: (charId, itemIdx) => {
@@ -188,19 +214,37 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
   incrementBountyKills: (count) => {
     const state = get();
+    let catsGained = 0;
     const bounties = state.bounties.map(b => {
-      if (b.type === 'banditHunt' && !b.completed && b.currentCount !== undefined && b.targetCount !== undefined) {
+      if (b.type === 'banditHunt' && b.accepted && !b.completed && b.currentCount !== undefined && b.targetCount !== undefined) {
         const newCount = b.currentCount + count;
         const completed = newCount >= b.targetCount;
-        const reward = completed ? b.reward : 0;
-        if (completed) {
-          useGameStore.setState({ cats: state.cats + reward });
-        }
+        if (completed) catsGained += b.reward;
         return { ...b, currentCount: Math.min(newCount, b.targetCount), completed };
       }
       return b;
     });
-    set({ bounties });
+    set({ bounties, cats: state.cats + catsGained });
+  },
+
+  completeEscortBounty: (bountyId) => {
+    const state = get();
+    let catsGained = 0;
+    const bounties = state.bounties.map(b => {
+      if (b.id === bountyId && b.type === 'escort' && b.accepted && !b.completed) {
+        catsGained += b.reward;
+        return { ...b, completed: true };
+      }
+      return b;
+    });
+    set({ bounties, cats: state.cats + catsGained });
+  },
+
+  useMedKit: (charId, part) => {
+    const char = squadRef?.getById(charId);
+    if (!char) return;
+    useMedicalKit(char, part);
+    set({ squad: [...(squadRef?.characters ?? [])] });
   },
 }));
 

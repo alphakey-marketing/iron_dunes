@@ -1,5 +1,5 @@
 import type { Vendor, Item, Character as CharData, BountyContract, Recruit, LootContainer, Enemy, Skills } from '../types';
-import { ITEMS } from '../data/items';
+import { ITEMS, makeCatsPouch } from '../data/items';
 
 let idCounter = 0;
 function genId(prefix: string): string {
@@ -147,6 +147,7 @@ export function generateBounties(_day: number): BountyContract[] {
       targetCount: type === 'banditHunt' ? randInt(2, 5) : undefined,
       currentCount: type === 'banditHunt' ? 0 : undefined,
       completed: false,
+      accepted: false,
       targetX: type !== 'banditHunt' ? randInt(5, 58) : undefined,
       targetY: type !== 'banditHunt' ? randInt(5, 58) : undefined,
     };
@@ -178,7 +179,10 @@ export function generateEnemyLoot(enemy: Enemy): Item[] {
   if (Math.random() < 0.4) loot.push({ ...ITEMS.scrapMetal });
   if (Math.random() < 0.3) loot.push({ ...ITEMS.driedRation });
   if (Math.random() < 0.15) loot.push({ ...ITEMS.medicalKit });
-  // Cats drop as a scrap-like item represented as extra cats via loot value
+  if (Math.random() < 0.6) {
+    const amount = 50 + Math.floor(Math.random() * 251); // 50–300 cats
+    loot.push(makeCatsPouch(amount));
+  }
   return loot;
 }
 
@@ -207,7 +211,15 @@ export function openLootContainer(container: LootContainer, char: CharData): Ite
   if (container.opened) return [];
   container.opened = true;
   const taken = [...container.items];
-  char.backpack.push(...taken);
   container.items = [];
+  for (const item of taken) {
+    if (item.type !== 'currency') {
+      char.backpack.push(item);
+      // Strength improves when picking up heavy items
+      if (item.weight > 5) {
+        char.skills.strength = Math.min(100, char.skills.strength + 0.2);
+      }
+    }
+  }
   return taken;
 }

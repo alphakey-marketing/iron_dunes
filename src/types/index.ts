@@ -103,6 +103,7 @@ export interface BountyContract {
   targetCount?: number;
   currentCount?: number;
   completed: boolean;
+  accepted: boolean;
   targetX?: number;
   targetY?: number;
 }
