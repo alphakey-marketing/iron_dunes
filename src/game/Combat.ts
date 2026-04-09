@@ -55,11 +55,24 @@ export function resolveCombatTick(attacker: Combatant, defender: Combatant): voi
   const weapon = getWeaponStats(attacker.weapon);
   const armour = getArmourStats(defender.armour);
 
+  // Body-part penalties on attacker (GDD §4.3)
+  const armCrippled = attacker.bodyParts.leftArm <= 0 || attacker.bodyParts.rightArm <= 0;
+  const armWeakened = attacker.bodyParts.leftArm < 50 || attacker.bodyParts.rightArm < 50;
+  const chestWeakened = attacker.bodyParts.chest < 50;
+
+  if (armCrippled) {
+    // Cannot attack; defender still gets a small defence tick
+    defender.skills.defence = Math.min(100, defender.skills.defence + 0.2);
+    return;
+  }
+
   const attackRoll = attacker.skills.melee + weapon.attackBonus + rand(-10, 10);
   const defenceRoll = defender.skills.defence + armour.defenceBonus + rand(-5, 5);
 
   if (attackRoll > defenceRoll) {
-    const rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);
+    let rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);
+    if (armWeakened) rawDamage *= 0.7;
+    if (chestWeakened) rawDamage *= 0.7;
     const finalDamage = rawDamage * (1 - armour.damageReduction);
     const part = randomHitLocation();
 

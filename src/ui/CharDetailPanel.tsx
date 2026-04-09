@@ -60,7 +60,7 @@ export function CharDetailPanel() {
     <div style={{
       position: 'absolute',
       right: 8,
-      top: 8,
+      top: 50,
       width: 220,
       background: 'rgba(0,0,0,0.8)',
       border: '1px solid rgba(255,255,255,0.2)',

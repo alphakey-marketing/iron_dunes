@@ -52,6 +52,12 @@ function getHpColor(pct: number): string {
   return '#aa3333';
 }
 
+function getHungerColor(hunger: number): string {
+  if (hunger > 60) return '#88aa44';
+  if (hunger > 30) return '#cc8822';
+  return '#aa3333';
+}
+
 export function HUD() {
   const { day, timeOfDay, isNight, cats, squad, selectedCharId, paused, slowMotion, togglePause, toggleSlowMotion, selectChar, openBountyBoard, openRecruit } = useGameStore();
 
@@ -101,7 +107,7 @@ export function HUD() {
                 <BarWidget value={hpPct * 100} max={100} color={getHpColor(hpPct)} />
               </div>
               <div style={{ marginBottom: 2 }}>
-                <BarWidget value={char.hunger} max={100} color='#88aa44' />
+                <BarWidget value={char.hunger} max={100} color={getHungerColor(char.hunger)} />
               </div>
               <div style={{ fontSize: 10, color: '#aaa' }}>{char.status}</div>
             </div>

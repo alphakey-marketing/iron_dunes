@@ -61,6 +61,7 @@ export class GameLoop {
       this.squad.update(delta);
       this.updatePlayerCombat(delta);
       this.ai.update(this.world.enemies, this.squad.characters, delta, this.world.isNight);
+      this.autoEngage();
       this.trackBanditKills();
       this.checkEscortBounties();
       this.world.cleanDeadEnemies();
@@ -101,6 +102,19 @@ export class GameLoop {
         enemy.status = defender.status as typeof enemy.status;
         applyBodyPartEffects(attacker);
         char.status = attacker.status as CharData['status'];
+      }
+    }
+  }
+
+  private autoEngage(): void {
+    for (const char of this.squad.characters) {
+      if (char.status === 'dead' || char.status === 'unconscious') continue;
+      if (char.combatTarget) continue;
+      const attacker = this.world.enemies.find(
+        e => e.status !== 'dead' && (e.state === 'attack' || e.state === 'chase') && e.aggroTarget === char.id
+      );
+      if (attacker) {
+        char.combatTarget = attacker.id;
       }
     }
   }

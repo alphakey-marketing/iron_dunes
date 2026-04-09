@@ -65,6 +65,9 @@ let squadRef: Squad | null = null;
 
 export function setGameRefs(_world: World, squad: Squad): void {
   squadRef = squad;
+  if (squad.selectedCharId) {
+    useGameStore.setState({ selectedCharId: squad.selectedCharId });
+  }
 }
 
 export const useGameStore = create<GameState & GameActions>((set, get) => ({
