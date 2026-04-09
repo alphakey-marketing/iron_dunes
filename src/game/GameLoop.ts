@@ -3,6 +3,7 @@ import { Squad } from './Squad';
 import { AISystem } from './AI';
 import { resolveCombatTick, applyBodyPartEffects, type Combatant } from './Combat';
 import { syncToStore, useGameStore } from '../store/gameStore';
+import { MAP_DATA } from '../data/map';
 import type { Character as CharData } from '../types';
 
 const UI_SYNC_INTERVAL = 0.1;
@@ -62,6 +63,7 @@ export class GameLoop {
       this.updatePlayerCombat(delta);
       this.ai.update(this.world.enemies, this.squad.characters, delta, this.world.isNight);
       this.autoEngage();
+      this.recoverUnconscious();
       this.trackBanditKills();
       this.checkEscortBounties();
       this.world.cleanDeadEnemies();
@@ -91,7 +93,8 @@ export class GameLoop {
       this.playerCombatTimers.set(char.id, timer);
       if (timer >= 0.5) {
         this.playerCombatTimers.set(char.id, 0);
-        const attacker: Combatant = { id: char.id, skills: char.skills as unknown as Combatant['skills'], bodyParts: char.bodyParts, weapon: char.weapon, armour: char.armour, status: char.status };
+        const skillMod = char.hunger <= 0 ? 0.5 : 1.0;
+        const attacker: Combatant = { id: char.id, skills: char.skills as unknown as Combatant['skills'], bodyParts: char.bodyParts, weapon: char.weapon, armour: char.armour, status: char.status, skillMod };
         const defender: Combatant = { id: enemy.id, skills: enemy.skills as unknown as Combatant['skills'], bodyParts: enemy.bodyParts, weapon: enemy.weapon, armour: enemy.armour, status: enemy.status };
         resolveCombatTick(attacker, defender);
         char.skills.melee = attacker.skills.melee;
@@ -116,6 +119,23 @@ export class GameLoop {
       if (attacker) {
         char.combatTarget = attacker.id;
       }
+    }
+  }
+
+  private recoverUnconscious(): void {
+    const hasNearbyThreat = this.world.enemies.some(
+      e => e.status !== 'dead' && (e.state === 'attack' || e.state === 'chase')
+    );
+    if (hasNearbyThreat) return;
+
+    for (const char of this.squad.characters) {
+      if (char.status !== 'unconscious') continue;
+      // Wake with 1–5 HP on each critical body part (GDD §4.3)
+      const recoveryHp = 1 + Math.floor(Math.random() * 5);
+      if (char.bodyParts.head <= 0) char.bodyParts.head = recoveryHp;
+      if (char.bodyParts.chest <= 0) char.bodyParts.chest = recoveryHp;
+      if (char.bodyParts.stomach <= 0) char.bodyParts.stomach = recoveryHp;
+      char.status = 'idle';
     }
   }
 
@@ -185,8 +205,14 @@ export class GameLoop {
         char.targetY = null;
         if (!char.combatTarget) char.status = 'idle';
       } else {
-        char.x += (dx / d) * char.moveSpeed * delta;
-        char.y += (dy / d) * char.moveSpeed * delta;
+        const tileX = Math.floor(char.x);
+        const tileY = Math.floor(char.y);
+        const biome = (tileX >= 0 && tileX < MAP_DATA.width && tileY >= 0 && tileY < MAP_DATA.height)
+          ? MAP_DATA.tiles[tileY][tileX].biome
+          : 'desert';
+        const tileMod = biome === 'dustPlains' ? 0.85 : 1.0;
+        char.x += (dx / d) * char.moveSpeed * tileMod * delta;
+        char.y += (dy / d) * char.moveSpeed * tileMod * delta;
         char.status = 'moving';
       }
     }

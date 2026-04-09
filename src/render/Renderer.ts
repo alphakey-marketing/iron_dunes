@@ -21,6 +21,7 @@ export class Renderer {
   private worldContainer: PIXI.Container;
   private onTileClick?: (tileX: number, tileY: number) => void;
   private onEntityClick?: (event: EntityClickEvent) => void;
+  private onRightClick?: () => void;
 
   // Snapshot of entities for click detection (updated each frame)
   private enemiesSnapshot: Enemy[] = [];
@@ -120,6 +121,11 @@ export class Renderer {
       const tileY = Math.floor(worldY / TILE_SIZE);
       this.onTileClick(tileX, tileY);
     });
+
+    this.app.canvas.addEventListener('contextmenu', (e: MouseEvent) => {
+      e.preventDefault();
+      if (this.onRightClick) this.onRightClick();
+    });
   }
 
   private setupResize(): void {
@@ -163,6 +169,10 @@ export class Renderer {
     this.onEntityClick = cb;
   }
 
+  setOnRightClick(cb: () => void): void {
+    this.onRightClick = cb;
+  }
+
   update(
     squad: CharData[],
     enemies: Enemy[],
@@ -171,6 +181,7 @@ export class Renderer {
     selectedId: string | null,
     timeOfDay: number,
     isNight: boolean,
+    escortTargets: { x: number; y: number }[],
   ): void {
     this.enemiesSnapshot = enemies;
     this.lootSnapshot = loot;
@@ -184,6 +195,6 @@ export class Renderer {
     }
 
     this.applyDayNightTint(timeOfDay, isNight);
-    this.charRenderer.update(squad, enemies, loot, vendors, selectedId);
+    this.charRenderer.update(squad, enemies, loot, vendors, selectedId, escortTargets);
   }
 }

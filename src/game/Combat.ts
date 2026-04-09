@@ -49,6 +49,8 @@ export interface Combatant {
   weapon: Item | null;
   armour: Item | null;
   status: string;
+  /** 0–1 multiplier applied to skill rolls (e.g. 0.5 when starving). Default 1. */
+  skillMod?: number;
 }
 
 export function resolveCombatTick(attacker: Combatant, defender: Combatant): void {
@@ -66,8 +68,11 @@ export function resolveCombatTick(attacker: Combatant, defender: Combatant): voi
     return;
   }
 
-  const attackRoll = attacker.skills.melee + weapon.attackBonus + rand(-10, 10);
-  const defenceRoll = defender.skills.defence + armour.defenceBonus + rand(-5, 5);
+  const attackerSkillMod = attacker.skillMod ?? 1.0;
+  const defenderSkillMod = defender.skillMod ?? 1.0;
+
+  const attackRoll = attacker.skills.melee * attackerSkillMod + weapon.attackBonus + rand(-10, 10);
+  const defenceRoll = defender.skills.defence * defenderSkillMod + armour.defenceBonus + rand(-5, 5);
 
   if (attackRoll > defenceRoll) {
     let rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);

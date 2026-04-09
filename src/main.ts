@@ -64,6 +64,20 @@ async function main(): Promise<void> {
     }
   });
 
+  renderer.setOnRightClick(() => {
+    const state = useGameStore.getState();
+    const selectedId = state.selectedCharId;
+    if (!selectedId) return;
+    const char = squad.getById(selectedId);
+    if (!char) return;
+    char.targetX = null;
+    char.targetY = null;
+    char.combatTarget = null;
+    if (char.status === 'moving' || char.status === 'fighting') {
+      char.status = 'idle';
+    }
+  });
+
   // Keyboard shortcuts
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.code === 'Space') {
@@ -92,6 +106,9 @@ async function main(): Promise<void> {
 
   function renderLoop(): void {
     const state = useGameStore.getState();
+    const escortTargets = state.bounties
+      .filter(b => b.type === 'escort' && b.accepted && !b.completed && b.targetX !== undefined && b.targetY !== undefined)
+      .map(b => ({ x: b.targetX!, y: b.targetY! }));
     renderer.update(
       state.squad,
       state.enemies,
@@ -100,6 +117,7 @@ async function main(): Promise<void> {
       state.selectedCharId,
       state.timeOfDay,
       state.isNight,
+      escortTargets,
     );
     requestAnimationFrame(renderLoop);
   }

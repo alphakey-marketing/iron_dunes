@@ -256,10 +256,11 @@ export function syncToStore(world: World, squad: Squad): void {
 
   const allDead = squad.allDead();
 
-  const newBounties = world.day > store.bountyDayRefresh
+  const REFRESH_INTERVAL = 5;
+  const newBounties = world.day >= store.bountyDayRefresh + REFRESH_INTERVAL
     ? generateBounties(world.day)
     : store.bounties;
-  const newRecruits = world.day > store.recruitDayRefresh
+  const newRecruits = world.day >= store.recruitDayRefresh + REFRESH_INTERVAL
     ? generateRecruits(world.day)
     : store.recruits;
 
@@ -274,8 +275,8 @@ export function syncToStore(world: World, squad: Squad): void {
     gameOver: allDead,
     bounties: newBounties,
     recruits: newRecruits,
-    bountyDayRefresh: world.day > store.bountyDayRefresh ? world.day : store.bountyDayRefresh,
-    recruitDayRefresh: world.day > store.recruitDayRefresh ? world.day : store.recruitDayRefresh,
+    bountyDayRefresh: newBounties !== store.bounties ? world.day : store.bountyDayRefresh,
+    recruitDayRefresh: newRecruits !== store.recruits ? world.day : store.recruitDayRefresh,
   });
 }
 

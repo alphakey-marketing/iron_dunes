@@ -28,10 +28,12 @@ export class CharRenderer {
   private charSprites: Map<string, CharSprite> = new Map();
   private lootSprites: Map<string, PIXI.Graphics> = new Map();
   private vendorSprites: Map<string, PIXI.Container> = new Map();
+  private escortMarkerGfx: PIXI.Graphics = new PIXI.Graphics();
 
   constructor(parent: PIXI.Container) {
     this.charLayer = new PIXI.Container();
     parent.addChild(this.charLayer);
+    this.charLayer.addChild(this.escortMarkerGfx);
   }
 
   private getOrCreateSprite(id: string): CharSprite {
@@ -89,7 +91,8 @@ export class CharRenderer {
     enemies: Enemy[],
     loot: LootContainer[],
     vendors: Vendor[],
-    selectedId: string | null
+    selectedId: string | null,
+    escortTargets: { x: number; y: number }[] = [],
   ): void {
     const activeIds = new Set<string>();
 
@@ -175,6 +178,19 @@ export class CharRenderer {
         this.charLayer.removeChild(gfx);
         this.lootSprites.delete(id);
       }
+    }
+
+    // Escort bounty destination markers
+    this.escortMarkerGfx.clear();
+    for (const target of escortTargets) {
+      const wx = target.x * TILE_SIZE;
+      const wy = target.y * TILE_SIZE;
+      // Outer pulsing ring
+      this.escortMarkerGfx.circle(wx, wy, TILE_SIZE * 0.8);
+      this.escortMarkerGfx.stroke({ color: 0xf0c040, alpha: 0.8, width: 2 });
+      // Inner dot
+      this.escortMarkerGfx.circle(wx, wy, 4);
+      this.escortMarkerGfx.fill({ color: 0xf0c040, alpha: 0.9 });
     }
   }
 
