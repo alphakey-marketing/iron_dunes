@@ -63,7 +63,7 @@ export class AISystem {
         this.handleIdle(enemy, squad, aggroRange, allEnemies);
         break;
       case 'patrol':
-        this.handlePatrol(enemy, squad, aggroRange, allEnemies, delta);
+        this.handlePatrol(enemy, squad, aggroRange, allEnemies, delta, isNight);
         break;
       case 'chase':
         this.handleChase(enemy, squad, delta);
@@ -89,7 +89,8 @@ export class AISystem {
     squad: CharData[],
     aggroRange: number,
     allEnemies: Enemy[],
-    delta: number
+    delta: number,
+    isNight: boolean
   ): void {
     const target = this.findTarget(enemy, squad, aggroRange);
     if (target) {
@@ -103,7 +104,9 @@ export class AISystem {
     if (d < 0.5) {
       enemy.patrolIndex = (enemy.patrolIndex + 1) % enemy.patrolPath.length;
     } else {
-      const speed = enemy.moveSpeed * PATROL_SPEED_MOD;
+      // GDD §3.4: enemy patrol frequency reduced by 30% at night
+      const nightMod = isNight ? 0.7 : 1.0;
+      const speed = enemy.moveSpeed * PATROL_SPEED_MOD * nightMod;
       const dx = (wp.x - enemy.x) / d;
       const dy = (wp.y - enemy.y) / d;
       enemy.x += dx * speed * delta;

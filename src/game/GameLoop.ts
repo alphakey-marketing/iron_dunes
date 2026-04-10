@@ -4,25 +4,37 @@ import { AISystem } from './AI';
 import { resolveCombatTick, applyBodyPartEffects, type Combatant } from './Combat';
 import { syncToStore, useGameStore } from '../store/gameStore';
 import { MAP_DATA } from '../data/map';
+import { Pathfinder } from './Pathfinder';
 import type { Character as CharData } from '../types';
 
 const UI_SYNC_INTERVAL = 0.1;
 const ESCORT_COMPLETION_DISTANCE = 3;
+/** Melee attack range for player-controlled characters (in tiles). */
+const PLAYER_ATTACK_RANGE = 1.5;
+/** Distance at which a character stops chasing and starts fighting. */
+const CHASE_STOP_RANGE = 1.2;
+/** Distance threshold for advancing to the next path waypoint. */
+const WAYPOINT_REACH_DIST = 0.4;
 
 export class GameLoop {
   private world: World;
   private squad: Squad;
   private ai: AISystem;
+  private pathfinder: Pathfinder;
   private lastTime: number = 0;
   private running: boolean = false;
   private rafId: number = 0;
   private timeScale: number = 1;
   private uiSyncTimer: number = 0;
+  private playerCombatTimers: Map<string, number> = new Map();
+  /** Per-character A* waypoint queues for click-to-move. */
+  private pathQueues: Map<string, Array<{ x: number; y: number }>> = new Map();
 
   constructor(world: World, squad: Squad) {
     this.world = world;
     this.squad = squad;
     this.ai = new AISystem();
+    this.pathfinder = new Pathfinder();
   }
 
   start(): void {
@@ -47,6 +59,40 @@ export class GameLoop {
   setSlowMotion(slow: boolean): void {
     if (this.timeScale === 0) return;
     this.timeScale = slow ? 0.25 : 1;
+  }
+
+  /**
+   * Request an A* path for a character to a destination tile.
+   * Clears any active combatTarget so the movement is treated as a flee command.
+   * autoEngage will not override this movement while the character is moving.
+   */
+  requestPath(charId: string, toX: number, toY: number): void {
+    const char = this.squad.getById(charId);
+    if (!char || char.status === 'dead' || char.status === 'unconscious') return;
+
+    char.combatTarget = null;
+    this.pathQueues.delete(charId);
+
+    this.pathfinder.findPath(char.x, char.y, toX, toY, (path) => {
+      if (path && path.length > 1) {
+        // path[0] is the start tile — skip it
+        const waypoints = path.slice(1);
+        this.pathQueues.set(charId, waypoints);
+        char.targetX = waypoints[0].x + 0.5;
+        char.targetY = waypoints[0].y + 0.5;
+      } else {
+        // Fallback: direct movement
+        char.targetX = toX;
+        char.targetY = toY;
+      }
+    });
+
+    char.status = 'moving';
+  }
+
+  /** Cancel any queued path for a character (e.g. on right-click). */
+  clearPath(charId: string): void {
+    this.pathQueues.delete(charId);
   }
 
   private tick(now: number): void {
@@ -78,24 +124,52 @@ export class GameLoop {
     this.rafId = requestAnimationFrame(this.tick.bind(this));
   }
 
-  private playerCombatTimers: Map<string, number> = new Map();
-
+  /**
+   * BUG FIX: fire attacks based on combatTarget + distance, not status.
+   * The old check (status === 'fighting') caused attacks to miss because status
+   * oscillated between 'moving' (chasing) and 'fighting' (in-range), preventing
+   * the 0.5 s timer from ever filling.
+   */
   private updatePlayerCombat(delta: number): void {
     for (const char of this.squad.characters) {
-      if (char.status !== 'fighting' || !char.combatTarget) continue;
+      if (char.status === 'dead' || char.status === 'unconscious') continue;
+      if (!char.combatTarget) continue;
+
       const enemy = this.world.enemies.find(e => e.id === char.combatTarget);
       if (!enemy || enemy.status === 'dead') {
         char.combatTarget = null;
-        char.status = 'idle';
+        this.playerCombatTimers.delete(char.id);
+        if (char.status === 'fighting') char.status = 'idle';
         continue;
       }
+
+      const d = Math.sqrt((char.x - enemy.x) ** 2 + (char.y - enemy.y) ** 2);
+      if (d > PLAYER_ATTACK_RANGE) continue; // still closing the distance
+
+      // In attack range — mark fighting and tick
+      char.status = 'fighting';
       const timer = (this.playerCombatTimers.get(char.id) ?? 0) + delta;
       this.playerCombatTimers.set(char.id, timer);
       if (timer >= 0.5) {
         this.playerCombatTimers.set(char.id, 0);
         const skillMod = char.hunger <= 0 ? 0.5 : 1.0;
-        const attacker: Combatant = { id: char.id, skills: char.skills as unknown as Combatant['skills'], bodyParts: char.bodyParts, weapon: char.weapon, armour: char.armour, status: char.status, skillMod };
-        const defender: Combatant = { id: enemy.id, skills: enemy.skills as unknown as Combatant['skills'], bodyParts: enemy.bodyParts, weapon: enemy.weapon, armour: enemy.armour, status: enemy.status };
+        const attacker: Combatant = {
+          id: char.id,
+          skills: char.skills as unknown as Combatant['skills'],
+          bodyParts: char.bodyParts,
+          weapon: char.weapon,
+          armour: char.armour,
+          status: char.status,
+          skillMod,
+        };
+        const defender: Combatant = {
+          id: enemy.id,
+          skills: enemy.skills as unknown as Combatant['skills'],
+          bodyParts: enemy.bodyParts,
+          weapon: enemy.weapon,
+          armour: enemy.armour,
+          status: enemy.status,
+        };
         resolveCombatTick(attacker, defender);
         char.skills.melee = attacker.skills.melee;
         char.bodyParts = attacker.bodyParts;
@@ -109,10 +183,17 @@ export class GameLoop {
     }
   }
 
+  /**
+   * BUG FIX: do not auto-engage while the character is explicitly moving.
+   * Previously autoEngage would immediately reassign combatTarget after the
+   * player right-clicked or clicked a tile to flee, preventing any escape.
+   */
   private autoEngage(): void {
     for (const char of this.squad.characters) {
       if (char.status === 'dead' || char.status === 'unconscious') continue;
       if (char.combatTarget) continue;
+      // Respect explicit player movement — skip auto-engage while moving
+      if (char.status === 'moving') continue;
       const attacker = this.world.enemies.find(
         e => e.status !== 'dead' && (e.state === 'attack' || e.state === 'chase') && e.aggroTarget === char.id
       );
@@ -130,7 +211,6 @@ export class GameLoop {
 
     for (const char of this.squad.characters) {
       if (char.status !== 'unconscious') continue;
-      // Wake with 1–5 HP on each critical body part (GDD §4.3)
       const recoveryHp = 1 + Math.floor(Math.random() * 5);
       if (char.bodyParts.head <= 0) char.bodyParts.head = recoveryHp;
       if (char.bodyParts.chest <= 0) char.bodyParts.chest = recoveryHp;
@@ -171,39 +251,69 @@ export class GameLoop {
     for (const char of this.squad.characters) {
       if (char.status === 'dead' || char.status === 'unconscious') continue;
 
-      // Update target towards combatTarget enemy position each tick
       if (char.combatTarget) {
+        // Direct chase — path queues are cleared; AI handles enemy side
         const enemy = this.world.enemies.find(e => e.id === char.combatTarget);
         if (!enemy || enemy.status === 'dead') {
           char.combatTarget = null;
           char.targetX = null;
           char.targetY = null;
+          this.pathQueues.delete(char.id);
           char.status = 'idle';
           continue;
         }
         const d = Math.sqrt((char.x - enemy.x) ** 2 + (char.y - enemy.y) ** 2);
-        if (d <= 1.2) {
-          // In attack range — handled by AI system attacking back; player side just stays
+        if (d <= CHASE_STOP_RANGE) {
           char.status = 'fighting';
           char.targetX = null;
           char.targetY = null;
+          this.pathQueues.delete(char.id);
           continue;
         }
-        // Keep chasing
+        // Chase: direct movement toward enemy (no pathfinding to keep it snappy)
         char.targetX = enemy.x;
         char.targetY = enemy.y;
+      } else {
+        // Follow A* waypoints when available
+        const path = this.pathQueues.get(char.id);
+        if (path && path.length > 0) {
+          const wp = path[0];
+          char.targetX = wp.x + 0.5;
+          char.targetY = wp.y + 0.5;
+        }
       }
 
       if (char.targetX === null || char.targetY === null) continue;
+
       const dx = char.targetX - char.x;
       const dy = char.targetY - char.y;
       const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 0.1) {
-        char.x = char.targetX;
-        char.y = char.targetY;
-        char.targetX = null;
-        char.targetY = null;
-        if (!char.combatTarget) char.status = 'idle';
+
+      if (d < WAYPOINT_REACH_DIST) {
+        // Close enough to sub-target (only reachable without combatTarget,
+        // since CHASE_STOP_RANGE > WAYPOINT_REACH_DIST keeps combat separate)
+        const path = this.pathQueues.get(char.id);
+        if (path && path.length > 0) {
+          path.shift(); // Advance to next waypoint
+          if (path.length > 0) {
+            const next = path[0];
+            char.targetX = next.x + 0.5;
+            char.targetY = next.y + 0.5;
+          } else {
+            this.pathQueues.delete(char.id);
+            char.x = char.targetX;
+            char.y = char.targetY;
+            char.targetX = null;
+            char.targetY = null;
+            char.status = 'idle';
+          }
+        } else {
+          char.x = char.targetX;
+          char.y = char.targetY;
+          char.targetX = null;
+          char.targetY = null;
+          char.status = 'idle';
+        }
       } else {
         const tileX = Math.floor(char.x);
         const tileY = Math.floor(char.y);

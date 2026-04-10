@@ -5,6 +5,11 @@ import { World } from './game/World';
 import { Squad } from './game/Squad';
 import { GameLoop } from './game/GameLoop';
 import { setGameRefs, useGameStore } from './store/gameStore';
+
+/** Maximum tile coordinate (map is 64×64, indices 0–63). */
+const MAP_MAX_COORD = 63;
+/** How many tiles away to flee when the player right-clicks during combat. */
+const FLEE_DISTANCE = 6;
 import { HUD } from './ui/HUD';
 import { CharDetailPanel } from './ui/CharDetailPanel';
 import { ShopModal } from './ui/ShopModal';
@@ -21,16 +26,17 @@ async function main(): Promise<void> {
 
   await renderer.init();
 
+  // Create game loop before registering click handlers so handlers can reference it
+  const gameLoop = new GameLoop(world, squad);
+
   renderer.setOnTileClick((tileX: number, tileY: number) => {
     const state = useGameStore.getState();
     const selectedId = state.selectedCharId;
     if (!selectedId) return;
     const char = squad.getById(selectedId);
     if (!char || char.status === 'dead' || char.status === 'unconscious') return;
-    char.targetX = tileX;
-    char.targetY = tileY;
-    char.status = 'moving';
-    char.combatTarget = null;
+    // Use A* pathfinding; clears combatTarget so autoEngage won't re-engage while moving
+    gameLoop.requestPath(selectedId, tileX, tileY);
   });
 
   renderer.setOnEntityClick((event) => {
@@ -61,6 +67,7 @@ async function main(): Promise<void> {
       char.targetY = enemy.y;
       char.status = 'moving';
       char.combatTarget = enemy.id;
+      gameLoop.clearPath(char.id);
     }
   });
 
@@ -70,11 +77,43 @@ async function main(): Promise<void> {
     if (!selectedId) return;
     const char = squad.getById(selectedId);
     if (!char) return;
-    char.targetX = null;
-    char.targetY = null;
+
     char.combatTarget = null;
-    if (char.status === 'moving' || char.status === 'fighting') {
-      char.status = 'idle';
+    gameLoop.clearPath(char.id);
+
+    // If threats are actively chasing/attacking this character, auto-flee from the nearest one.
+    // This sets status='moving' so autoEngage won't immediately re-engage (GDD §6.1 flee).
+    const threats = world.enemies.filter(
+      e => e.status !== 'dead' && (e.state === 'attack' || e.state === 'chase') && e.aggroTarget === selectedId
+    );
+
+    if (threats.length > 0) {
+      let nearest = threats[0];
+      let minDist = Infinity;
+      for (const t of threats) {
+        const d = Math.sqrt((char.x - t.x) ** 2 + (char.y - t.y) ** 2);
+        if (d < minDist) { minDist = d; nearest = t; }
+      }
+      const dirX = char.x - nearest.x;
+      const dirY = char.y - nearest.y;
+      const dirD = Math.sqrt(dirX * dirX + dirY * dirY);
+      if (dirD > 0) {
+        const fleeX = Math.round(Math.min(MAP_MAX_COORD, Math.max(0, char.x + (dirX / dirD) * FLEE_DISTANCE)));
+        const fleeY = Math.round(Math.min(MAP_MAX_COORD, Math.max(0, char.y + (dirY / dirD) * FLEE_DISTANCE)));
+        gameLoop.requestPath(char.id, fleeX, fleeY);
+      } else {
+        // Directly on top of enemy — just cancel action
+        char.targetX = null;
+        char.targetY = null;
+        if (char.status === 'moving' || char.status === 'fighting') char.status = 'idle';
+      }
+    } else {
+      // No active threat — just cancel the current action
+      char.targetX = null;
+      char.targetY = null;
+      if (char.status === 'moving' || char.status === 'fighting') {
+        char.status = 'idle';
+      }
     }
   });
 
@@ -94,8 +133,6 @@ async function main(): Promise<void> {
       useGameStore.getState().openRecruit();
     }
   });
-
-  const gameLoop = new GameLoop(world, squad);
 
   useGameStore.subscribe((state) => {
     gameLoop.setPaused(state.paused);
