@@ -373,7 +373,7 @@ export class WandererSpawner {
 
   /** Ensures at least MIN_ACTIVE wanderers are on the map. */
   private ensureMinimum(world: World): void {
-    const missing = Math.min(MAX_ACTIVE, MIN_ACTIVE) - this.wanderers.length;
+    const missing = Math.max(0, MIN_ACTIVE - this.wanderers.length);
     for (let i = 0; i < missing; i++) {
       const pos = this.getSpawnPosition(world);
       if (!pos) break;
