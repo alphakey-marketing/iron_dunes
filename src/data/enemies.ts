@@ -45,7 +45,6 @@ export function createBandit(spawnX: number, spawnY: number, patrolPath: { x: nu
     x: spawnX,
     y: spawnY,
     maxHealth: 100 + (skills.strength * 2),
-    currentHealth: 100 + (skills.strength * 2),
     skills,
     bodyParts: makeBodyParts(),
     status: 'idle',

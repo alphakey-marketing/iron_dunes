@@ -268,9 +268,10 @@ export function syncToStore(world: World, squad: Squad): void {
     day: world.day,
     timeOfDay: world.timeOfDay,
     isNight: world.isNight,
-    squad: [...squad.characters],
+    // Deep-copy bodyParts and skills so Zustand detects changes via referential inequality
+    squad: squad.characters.map(c => ({ ...c, bodyParts: { ...c.bodyParts }, skills: { ...c.skills } })),
     selectedCharId: squad.selectedCharId,
-    enemies: [...world.enemies],
+    enemies: world.enemies.map(e => ({ ...e, bodyParts: { ...e.bodyParts }, skills: { ...e.skills } })),
     lootContainers: [...world.lootContainers],
     gameOver: allDead,
     bounties: newBounties,

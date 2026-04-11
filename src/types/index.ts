@@ -69,7 +69,6 @@ export interface Enemy {
   x: number;
   y: number;
   maxHealth: number;
-  currentHealth: number;
   skills: Skills;
   bodyParts: BodyParts;
   status: CharStatus;

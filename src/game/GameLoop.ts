@@ -27,6 +27,8 @@ export class GameLoop {
   private timeScale: number = 1;
   private uiSyncTimer: number = 0;
   private playerCombatTimers: Map<string, number> = new Map();
+  /** Tracks enemy IDs already reported as dead so kills are counted exactly once. */
+  private reportedDeadIds: Set<string> = new Set();
   /** Per-character A* waypoint queues for click-to-move. */
   private pathQueues: Map<string, Array<{ x: number; y: number }>> = new Map();
 
@@ -155,8 +157,8 @@ export class GameLoop {
         const skillMod = char.hunger <= 0 ? 0.5 : 1.0;
         const attacker: Combatant = {
           id: char.id,
-          skills: char.skills as unknown as Combatant['skills'],
-          bodyParts: char.bodyParts,
+          skills: { ...char.skills } as unknown as Combatant['skills'],
+          bodyParts: { ...char.bodyParts },
           weapon: char.weapon,
           armour: char.armour,
           status: char.status,
@@ -164,8 +166,8 @@ export class GameLoop {
         };
         const defender: Combatant = {
           id: enemy.id,
-          skills: enemy.skills as unknown as Combatant['skills'],
-          bodyParts: enemy.bodyParts,
+          skills: { ...enemy.skills } as unknown as Combatant['skills'],
+          bodyParts: { ...enemy.bodyParts },
           weapon: enemy.weapon,
           armour: enemy.armour,
           status: enemy.status,
@@ -173,6 +175,7 @@ export class GameLoop {
         resolveCombatTick(attacker, defender);
         char.skills.melee = attacker.skills.melee;
         char.bodyParts = attacker.bodyParts;
+        enemy.skills.melee = defender.skills.melee;
         enemy.skills.defence = defender.skills.defence;
         enemy.bodyParts = defender.bodyParts;
         applyBodyPartEffects(defender);
@@ -220,11 +223,12 @@ export class GameLoop {
   }
 
   private trackBanditKills(): void {
-    const justDied = this.world.enemies.filter(
-      e => e.status === 'dead' && e.faction === 'bandit'
+    const newlyDead = this.world.enemies.filter(
+      e => e.status === 'dead' && e.faction === 'bandit' && !this.reportedDeadIds.has(e.id)
     );
-    if (justDied.length > 0) {
-      useGameStore.getState().incrementBountyKills(justDied.length);
+    if (newlyDead.length > 0) {
+      for (const e of newlyDead) this.reportedDeadIds.add(e.id);
+      useGameStore.getState().incrementBountyKills(newlyDead.length);
     }
   }
 

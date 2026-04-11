@@ -22,8 +22,8 @@ function getHealthPercent(enemy: Enemy): number {
 function toCombatant(entity: Enemy | CharData): Combatant {
   return {
     id: entity.id,
-    skills: entity.skills as unknown as { melee: number; defence: number; strength: number; [key: string]: number },
-    bodyParts: entity.bodyParts,
+    skills: { ...entity.skills } as unknown as { melee: number; defence: number; strength: number; [key: string]: number },
+    bodyParts: { ...entity.bodyParts },
     weapon: entity.weapon,
     armour: entity.armour,
     status: entity.status,
@@ -176,6 +176,7 @@ export class AISystem {
       // Write back mutated values
       enemy.skills.melee = enemyCombatant.skills.melee;
       enemy.bodyParts = enemyCombatant.bodyParts;
+      target.skills.melee = targetCombatant.skills.melee;
       target.skills.defence = targetCombatant.skills.defence;
       target.bodyParts = targetCombatant.bodyParts;
       applyBodyPartEffects(enemyCombatant);
@@ -208,7 +209,6 @@ export class AISystem {
       for (const part of parts) {
         enemy.bodyParts[part] = Math.min(100, enemy.bodyParts[part] + 20);
       }
-      enemy.currentHealth = Math.min(enemy.maxHealth, enemy.currentHealth + 20);
       this.fleeTimers.delete(enemy.id);
     }
   }
