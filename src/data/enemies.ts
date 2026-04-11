@@ -151,6 +151,7 @@ export function createWanderer(archetype: WandererArchetype, spawnX: number, spa
     visitedRuinIndices: [],
     scavengerFleeing: false,
     scavengerFleeTimer: 0,
+    scavengerIdleDuration: 0,
     raiderFleeTimer: 0,
   };
 }

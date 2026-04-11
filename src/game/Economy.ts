@@ -134,11 +134,11 @@ export function sellItem(vendor: Vendor, item: Item, playerCats: number, playerB
   return { success: true, newCats: playerCats + item.sellPrice, message: `Sold ${item.name}` };
 }
 
-export function generateBounties(_day: number): BountyContract[] {
+export function generateBounties(day: number): BountyContract[] {
   const bountyTypes = ['banditHunt', 'campRaid', 'escort'] as const;
   return bountyTypes.map((type) => {
     const id = genId(`bounty`);
-    const reward = randInt(300, 800);
+    const reward = randInt(300 + day * 20, 800 + day * 20);
     return {
       id,
       type,

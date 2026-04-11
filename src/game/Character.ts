@@ -109,10 +109,7 @@ export function updateCharacter(char: CharData, delta: number): void {
   if (char.hungerTimer >= 1) {
     char.hunger = Math.max(0, char.hunger - (hungerRate * char.hungerTimer));
     char.hungerTimer = 0;
-  }
-
-  if (char.hunger < 20) {
-    autoEat(char);
+    if (char.hunger < 20) autoEat(char);
   }
 
   if (char.hunger <= 0) {
@@ -152,11 +149,13 @@ export function updateCharacter(char: CharData, delta: number): void {
     }
   }
 
-  char.moveSpeed = getMoveSpeed(
-    char.hunger <= 0 ? char.skills.athletics * 0.8 : char.skills.athletics,
-    char.bodyParts.leftLeg,
-    char.bodyParts.rightLeg
-  ) * (char.isCrouching ? 0.5 : 1.0);
+  if (isConscious(char)) {
+    char.moveSpeed = getMoveSpeed(
+      char.hunger <= 0 ? char.skills.athletics * 0.8 : char.skills.athletics,
+      char.bodyParts.leftLeg,
+      char.bodyParts.rightLeg
+    ) * (char.isCrouching ? 0.5 : 1.0);
+  }
 }
 
 export function useMedicalKit(char: CharData, part: keyof CharData['bodyParts']): boolean {

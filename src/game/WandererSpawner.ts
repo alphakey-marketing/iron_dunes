@@ -184,8 +184,7 @@ export class WandererSpawner {
     if (w.state === 'idle_at_ruin') {
       w.idleTimer += delta;
       w.status = 'idle';
-      if (w.idleTimer >= w.wanderTimer) {
-        // wanderTimer stores target idle duration (set on arrival)
+      if (w.idleTimer >= w.scavengerIdleDuration) {
         w.visitedRuinIndices.push(w.targetRuinIdx);
         w.idleTimer = 0;
         w.state = 'seek_ruin';
@@ -219,8 +218,7 @@ export class WandererSpawner {
     if (d < 1.0) {
       w.state = 'idle_at_ruin';
       w.idleTimer = 0;
-      // Store random idle target duration in wanderTimer
-      w.wanderTimer = SCAVENGER_RUIN_IDLE_MIN + Math.random() * (SCAVENGER_RUIN_IDLE_MAX - SCAVENGER_RUIN_IDLE_MIN);
+      w.scavengerIdleDuration = SCAVENGER_RUIN_IDLE_MIN + Math.random() * (SCAVENGER_RUIN_IDLE_MAX - SCAVENGER_RUIN_IDLE_MIN);
       w.status = 'idle';
     } else {
       w.x += ((target.x - w.x) / d) * w.moveSpeed * delta;
@@ -426,7 +424,7 @@ export class WandererSpawner {
 
     const valid = edgeCandidates.filter(p => {
       const biome = MAP_DATA.tiles[p.y]?.[p.x]?.biome;
-      if (biome !== 'desert' && biome !== 'dustPlains') return false;
+      if (biome !== 'desert' && biome !== 'ruins') return false;
       return dist(p.x, p.y, cx, cy) >= SETTLEMENT_EXCLUSION;
     });
 

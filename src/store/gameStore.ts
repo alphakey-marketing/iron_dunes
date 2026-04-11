@@ -188,7 +188,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       return b;
     });
 
-    set({ lootContainers: [...state.lootContainers], cats: state.cats + extraCats, bounties });
+    set({ lootContainers: state.lootContainers.map(c =>
+      c.id === containerId ? { ...c, items: [], opened: true } : c
+    ), cats: state.cats + extraCats, bounties });
   },
 
   equipItem: (charId, itemIdx) => {
@@ -265,22 +267,21 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
   recruitWanderer: (wandererId) => {
     const state = get();
-    const wanderer = state.wanderers.find(w => w.id === wandererId);
-    if (!wanderer || wanderer.recruitCost === null) return;
-    if (state.cats < wanderer.recruitCost) return;
+    const liveWanderer = wandererSpawnerRef?.wanderers.find(w => w.id === wandererId);
+    if (!liveWanderer || liveWanderer.recruitCost === null) return;
+    if (state.cats < liveWanderer.recruitCost) return;
     if (!squadRef || squadRef.characters.length >= 4) return;
 
-    // Carry over the wanderer's actual position and skills
-    const newChar = createCharacter(wanderer.id, wanderer.name, wanderer.x, wanderer.y);
-    newChar.skills = { ...wanderer.skills };
-    newChar.weapon = wanderer.weapon ? { ...wanderer.weapon } : null;
+    // Carry over the wanderer's actual live position and skills
+    const newChar = createCharacter(liveWanderer.id, liveWanderer.name, liveWanderer.x, liveWanderer.y);
+    newChar.skills = { ...liveWanderer.skills };
+    newChar.weapon = liveWanderer.weapon ? { ...liveWanderer.weapon } : null;
     squadRef.addCharacter(newChar);
 
     // Mark the live wanderer object as dead so WandererSpawner.cleanDead removes it
-    const liveWanderer = wandererSpawnerRef?.wanderers.find(w => w.id === wandererId);
-    if (liveWanderer) liveWanderer.status = 'dead';
+    liveWanderer.status = 'dead';
 
-    set({ cats: state.cats - wanderer.recruitCost, wandererMenuId: null });
+    set({ cats: state.cats - liveWanderer.recruitCost, wandererMenuId: null });
   },
 }));
 

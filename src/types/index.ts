@@ -95,13 +95,14 @@ export interface Wanderer extends Enemy {
   wanderDir: { x: number; y: number };
   /**
    * Drifter: seconds until next direction change.
-   * Scavenger: target idle duration at the current ruin (set on arrival).
    */
   wanderTimer: number;
   /** Scavenger: index into POI.ruinSites of the current target ruin. */
   targetRuinIdx: number;
   /** Scavenger: seconds spent idling at current ruin. */
   idleTimer: number;
+  /** Scavenger: target idle duration at the current ruin (set on arrival). */
+  scavengerIdleDuration: number;
   /** Scavenger: indices of already-visited ruin sites this cycle. */
   visitedRuinIndices: number[];
   /** Scavenger: currently executing a flee-from-threat burst. */

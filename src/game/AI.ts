@@ -204,8 +204,8 @@ export class AISystem {
 
     const d = dist(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
     if (d > 0.5) {
-      const dx = (enemy.x - enemy.spawnX) / d;
-      const dy = (enemy.y - enemy.spawnY) / d;
+      const dx = (enemy.spawnX - enemy.x) / d;
+      const dy = (enemy.spawnY - enemy.y) / d;
       enemy.x += dx * enemy.moveSpeed * delta;
       enemy.y += dy * enemy.moveSpeed * delta;
     }

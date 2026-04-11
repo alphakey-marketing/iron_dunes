@@ -248,6 +248,9 @@ export class GameLoop {
   private recoverUnconscious(): void {
     const hasNearbyThreat = this.world.enemies.some(
       e => e.status !== 'dead' && (e.state === 'attack' || e.state === 'chase')
+    ) || this.wandererSpawner.wanderers.some(
+      w => w.archetype === 'desperateRaider' && w.status !== 'dead'
+        && (w.state === 'attack' || w.state === 'chase')
     );
     if (hasNearbyThreat) return;
 
