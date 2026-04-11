@@ -362,10 +362,12 @@ export class WandererSpawner {
       this.respawnTimers[i] -= delta;
       if (this.respawnTimers[i] <= 0) {
         this.respawnTimers.splice(i, 1);
-        const pos = this.getSpawnPosition(world);
-        if (pos) {
-          const archetype = pickArchetype();
-          this.wanderers.push(createWanderer(archetype, pos.x, pos.y));
+        if (this.wanderers.length < MAX_ACTIVE) {
+          const pos = this.getSpawnPosition(world);
+          if (pos) {
+            const archetype = pickArchetype();
+            this.wanderers.push(createWanderer(archetype, pos.x, pos.y));
+          }
         }
       }
     }

@@ -74,9 +74,10 @@ let wandererSpawnerRef: WandererSpawner | null = null;
 export function setGameRefs(_world: World, squad: Squad, wandererSpawner?: WandererSpawner): void {
   squadRef = squad;
   if (wandererSpawner) wandererSpawnerRef = wandererSpawner;
-  if (squad.selectedCharId) {
-    useGameStore.setState({ selectedCharId: squad.selectedCharId });
-  }
+  useGameStore.setState({
+    selectedCharId: squad.selectedCharId,
+    squad: squad.characters.map(c => ({ ...c, bodyParts: { ...c.bodyParts }, skills: { ...c.skills } })),
+  });
 }
 
 export const useGameStore = create<GameState & GameActions>((set, get) => ({
