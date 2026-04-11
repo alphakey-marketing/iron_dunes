@@ -23,12 +23,12 @@ async function main(): Promise<void> {
   const squad = new Squad();
   const renderer = new Renderer();
 
-  setGameRefs(world, squad, gameLoop.wandererSpawner);
-
   await renderer.init();
 
   // Create game loop before registering click handlers so handlers can reference it
   const gameLoop = new GameLoop(world, squad);
+
+  setGameRefs(world, squad, gameLoop.wandererSpawner);
 
   renderer.setOnTileClick((tileX: number, tileY: number) => {
     const state = useGameStore.getState();
