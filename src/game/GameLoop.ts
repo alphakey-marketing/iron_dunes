@@ -1,11 +1,13 @@
 import { World } from './World';
 import { Squad } from './Squad';
 import { AISystem } from './AI';
+import { WandererSpawner } from './WandererSpawner';
 import { resolveCombatTick, applyBodyPartEffects, type Combatant } from './Combat';
 import { syncToStore, useGameStore } from '../store/gameStore';
 import { MAP_DATA } from '../data/map';
 import { Pathfinder } from './Pathfinder';
-import type { Character as CharData } from '../types';
+import { updateStealthTraining } from './Character';
+import type { Character as CharData, Enemy, Wanderer } from '../types';
 
 const UI_SYNC_INTERVAL = 0.1;
 const ESCORT_COMPLETION_DISTANCE = 3;
@@ -20,6 +22,7 @@ export class GameLoop {
   private world: World;
   private squad: Squad;
   private ai: AISystem;
+  public wandererSpawner: WandererSpawner;
   private pathfinder: Pathfinder;
   private lastTime: number = 0;
   private running: boolean = false;
@@ -36,6 +39,7 @@ export class GameLoop {
     this.world = world;
     this.squad = squad;
     this.ai = new AISystem();
+    this.wandererSpawner = new WandererSpawner();
     this.pathfinder = new Pathfinder();
   }
 
@@ -61,6 +65,21 @@ export class GameLoop {
   setSlowMotion(slow: boolean): void {
     if (this.timeScale === 0) return;
     this.timeScale = slow ? 0.25 : 1;
+  }
+
+  /**
+   * Toggles crouch for all living, conscious squad members (GDD §6.6).
+   * Called by the C key handler or the [CROUCH] button in the HUD.
+   */
+  toggleCrouch(): void {
+    const living = this.squad.characters.filter(
+      c => c.status !== 'dead' && c.status !== 'unconscious'
+    );
+    if (living.length === 0) return;
+    const newCrouch = !living[0].isCrouching;
+    for (const char of living) {
+      char.isCrouching = newCrouch;
+    }
   }
 
   /**
@@ -110,8 +129,10 @@ export class GameLoop {
       this.squad.update(delta);
       this.updatePlayerCombat(delta);
       this.ai.update(this.world.enemies, this.squad.characters, delta, this.world.isNight);
+      this.wandererSpawner.update(delta, this.world, this.squad.characters);
       this.autoEngage();
       this.recoverUnconscious();
+      this.updateStealthTraining(delta);
       this.trackBanditKills();
       this.checkEscortBounties();
       this.world.cleanDeadEnemies();
@@ -120,7 +141,7 @@ export class GameLoop {
     this.uiSyncTimer += rawDelta;
     if (this.uiSyncTimer >= UI_SYNC_INTERVAL) {
       this.uiSyncTimer = 0;
-      syncToStore(this.world, this.squad);
+      syncToStore(this.world, this.squad, this.wandererSpawner.wanderers);
     }
 
     this.rafId = requestAnimationFrame(this.tick.bind(this));
@@ -137,7 +158,7 @@ export class GameLoop {
       if (char.status === 'dead' || char.status === 'unconscious') continue;
       if (!char.combatTarget) continue;
 
-      const enemy = this.world.enemies.find(e => e.id === char.combatTarget);
+      const enemy = this.findEnemyOrWanderer(char.combatTarget);
       if (!enemy || enemy.status === 'dead') {
         char.combatTarget = null;
         this.playerCombatTimers.delete(char.id);
@@ -186,6 +207,12 @@ export class GameLoop {
     }
   }
 
+  /** Returns the live Enemy or Wanderer object for the given id (undefined if not found). */
+  private findEnemyOrWanderer(id: string): Enemy | Wanderer | undefined {
+    return this.world.enemies.find(e => e.id === id)
+      ?? this.wandererSpawner.wanderers.find(w => w.id === id);
+  }
+
   /**
    * BUG FIX: do not auto-engage while the character is explicitly moving.
    * Previously autoEngage would immediately reassign combatTarget after the
@@ -197,11 +224,23 @@ export class GameLoop {
       if (char.combatTarget) continue;
       // Respect explicit player movement — skip auto-engage while moving
       if (char.status === 'moving') continue;
+
+      // Check world enemies
       const attacker = this.world.enemies.find(
         e => e.status !== 'dead' && (e.state === 'attack' || e.state === 'chase') && e.aggroTarget === char.id
       );
       if (attacker) {
         char.combatTarget = attacker.id;
+        continue;
+      }
+
+      // Check Desperate Raider wanderers (group aggro does not propagate — GDD §8.3)
+      const raider = this.wandererSpawner.wanderers.find(
+        w => w.archetype === 'desperateRaider' && w.status !== 'dead'
+          && (w.state === 'attack' || w.state === 'chase') && w.aggroTarget === char.id
+      );
+      if (raider) {
+        char.combatTarget = raider.id;
       }
     }
   }
@@ -219,6 +258,32 @@ export class GameLoop {
       if (char.bodyParts.chest <= 0) char.bodyParts.chest = recoveryHp;
       if (char.bodyParts.stomach <= 0) char.bodyParts.stomach = recoveryHp;
       char.status = 'idle';
+    }
+  }
+
+  /**
+   * Trains stealth for each crouching squad member near an enemy (GDD §6.6).
+   * Uses the base (un-modified) aggro radius so the player must actually be near the enemy.
+   */
+  private updateStealthTraining(delta: number): void {
+    const BASE_AGGRO_DAY = 8;
+    const BASE_AGGRO_NIGHT = 4;
+    const baseRange = this.world.isNight ? BASE_AGGRO_NIGHT : BASE_AGGRO_DAY;
+
+    for (const char of this.squad.characters) {
+      if (!char.isCrouching || char.status === 'dead' || char.status === 'unconscious') continue;
+
+      const nearEnemy = this.world.enemies.some(e => {
+        if (e.status === 'dead') return false;
+        const d = Math.sqrt((char.x - e.x) ** 2 + (char.y - e.y) ** 2);
+        return d <= baseRange;
+      }) || this.wandererSpawner.wanderers.some(w => {
+        if (w.status === 'dead') return false;
+        const d = Math.sqrt((char.x - w.x) ** 2 + (char.y - w.y) ** 2);
+        return d <= baseRange;
+      });
+
+      updateStealthTraining(char, nearEnemy, delta);
     }
   }
 
@@ -257,7 +322,7 @@ export class GameLoop {
 
       if (char.combatTarget) {
         // Direct chase — path queues are cleared; AI handles enemy side
-        const enemy = this.world.enemies.find(e => e.id === char.combatTarget);
+        const enemy = this.findEnemyOrWanderer(char.combatTarget);
         if (!enemy || enemy.status === 'dead') {
           char.combatTarget = null;
           char.targetX = null;

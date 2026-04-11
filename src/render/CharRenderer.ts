@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import type { Character as CharData, Enemy, LootContainer, Vendor } from '../types';
+import type { Character as CharData, Enemy, LootContainer, Vendor, Wanderer } from '../types';
 import { TILE_SIZE } from '../data/map';
 
 const CHAR_RADIUS = 10;
@@ -14,6 +14,8 @@ const COLORS = {
   selected: 0xFFFF00,
   loot: 0xF0C040,
   dead: 0x444444,
+  wandererNeutral: 0xA8C5A0, // GDD §12.2
+  wandererHostile: 0xE84040, // Desperate Raiders — same red as bandits
 };
 
 interface CharSprite {
@@ -89,6 +91,7 @@ export class CharRenderer {
   update(
     squad: CharData[],
     enemies: Enemy[],
+    wanderers: Wanderer[],
     loot: LootContainer[],
     vendors: Vendor[],
     selectedId: string | null,
@@ -134,6 +137,31 @@ export class CharRenderer {
       this.drawHpBar(sprite, hpPct);
     }
 
+    for (const [id] of this.charSprites) {
+      if (!activeIds.has(id)) {
+        this.removeSprite(id);
+      }
+    }
+
+    // Render wanderers (separate from enemies — different tint per archetype)
+    for (const w of wanderers) {
+      if (w.status === 'dead') continue;
+      activeIds.add(w.id);
+      const sprite = this.getOrCreateSprite(w.id);
+      sprite.container.x = w.x * TILE_SIZE;
+      sprite.container.y = w.y * TILE_SIZE;
+
+      const baseColor = w.archetype === 'desperateRaider' ? COLORS.wandererHostile : COLORS.wandererNeutral;
+      const color = w.status === 'unconscious' ? COLORS.unconscious : baseColor;
+      sprite.circle.clear();
+      sprite.circle.circle(0, 0, CHAR_RADIUS);
+      sprite.circle.fill({ color });
+
+      const hpPct = Object.values(w.bodyParts).reduce((a, b) => a + b, 0) / 700;
+      this.drawHpBar(sprite, hpPct);
+    }
+
+    // Remove stale sprites (wanderers that were removed this frame)
     for (const [id] of this.charSprites) {
       if (!activeIds.has(id)) {
         this.removeSprite(id);

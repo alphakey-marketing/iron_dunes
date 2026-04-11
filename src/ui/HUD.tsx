@@ -59,7 +59,7 @@ function getHungerColor(hunger: number): string {
 }
 
 export function HUD() {
-  const { day, timeOfDay, isNight, cats, squad, selectedCharId, paused, slowMotion, togglePause, toggleSlowMotion, selectChar, openBountyBoard, openRecruit } = useGameStore();
+  const { day, timeOfDay, isNight, cats, squad, selectedCharId, paused, slowMotion, isCrouching, togglePause, toggleSlowMotion, selectChar, openBountyBoard, openRecruit } = useGameStore();
 
   const progress = timeOfDay / 600;
   const hour = Math.floor(progress * 24);
@@ -72,6 +72,16 @@ export function HUD() {
         <span>Day {day} — {timeStr}</span>
         {isNight && <span style={{ color: '#8888ff' }}>🌙</span>}
         <span style={{ marginLeft: 'auto' }}>⚙ {cats} cats</span>
+        <button
+          style={{ ...btnStyle, background: isCrouching ? 'rgba(100,200,100,0.3)' : undefined }}
+          title="Crouch [C]"
+          onClick={() => {
+            // Dispatched via the global gameLoop reference set in main.ts
+            window.dispatchEvent(new CustomEvent('iron-dunes:toggleCrouch'));
+          }}
+        >
+          {isCrouching ? '🧎 Crouch' : '🚶 Stand'}
+        </button>
         <button style={btnStyle} onClick={openBountyBoard} title="Bounty Board [B]">📋 Bounties</button>
         <button style={btnStyle} onClick={openRecruit} title="Recruit [R]">👤 Recruit</button>
         <button style={{ ...btnStyle, background: slowMotion ? 'rgba(200,150,0,0.3)' : undefined }} onClick={toggleSlowMotion}>
@@ -102,7 +112,10 @@ export function HUD() {
                 minWidth: 120,
               }}
             >
-              <div style={{ marginBottom: 4 }}>{char.name}</div>
+              <div style={{ marginBottom: 4 }}>
+                {char.isCrouching && <span title="Crouching" style={{ marginRight: 4 }}>🧎</span>}
+                {char.name}
+              </div>
               <div style={{ marginBottom: 2 }}>
                 <BarWidget value={hpPct * 100} max={100} color={getHpColor(hpPct)} />
               </div>

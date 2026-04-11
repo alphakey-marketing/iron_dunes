@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { GameState } from '../types';
+import type { GameState, Wanderer } from '../types';
 import type { World } from '../game/World';
 import type { Squad } from '../game/Squad';
+import type { WandererSpawner } from '../game/WandererSpawner';
 import { createGeneralTrader, createArmourSmith, createWeaponsDealer, buyItem, sellItem, generateBounties, generateRecruits, openLootContainer, BANDIT_CAMP_LOOT_RADIUS } from '../game/Economy';
 import { createCharacter, useMedicalKit } from '../game/Character';
 import { POI } from '../data/map';
@@ -24,6 +25,7 @@ const initialState: GameState = {
   squad: [],
   selectedCharId: null,
   enemies: [],
+  wanderers: [],
   vendors: initialVendors,
   bounties: initialBounties,
   bountyDayRefresh: 1,
@@ -36,6 +38,8 @@ const initialState: GameState = {
   paused: false,
   slowMotion: false,
   lootContainers: [],
+  isCrouching: false,
+  wandererMenuId: null,
 };
 
 interface GameActions {
@@ -59,12 +63,17 @@ interface GameActions {
   incrementBountyKills: (count: number) => void;
   completeEscortBounty: (bountyId: string) => void;
   useMedKit: (charId: string, part: keyof CharData['bodyParts']) => void;
+  openWandererMenu: (wandererId: string) => void;
+  closeWandererMenu: () => void;
+  recruitWanderer: (wandererId: string) => void;
 }
 
 let squadRef: Squad | null = null;
+let wandererSpawnerRef: WandererSpawner | null = null;
 
-export function setGameRefs(_world: World, squad: Squad): void {
+export function setGameRefs(_world: World, squad: Squad, wandererSpawner?: WandererSpawner): void {
   squadRef = squad;
+  if (wandererSpawner) wandererSpawnerRef = wandererSpawner;
   if (squad.selectedCharId) {
     useGameStore.setState({ selectedCharId: squad.selectedCharId });
   }
@@ -249,9 +258,32 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     useMedicalKit(char, part);
     set({ squad: [...(squadRef?.characters ?? [])] });
   },
+
+  openWandererMenu: (wandererId) => set({ wandererMenuId: wandererId }),
+  closeWandererMenu: () => set({ wandererMenuId: null }),
+
+  recruitWanderer: (wandererId) => {
+    const state = get();
+    const wanderer = state.wanderers.find(w => w.id === wandererId);
+    if (!wanderer || wanderer.recruitCost === null) return;
+    if (state.cats < wanderer.recruitCost) return;
+    if (!squadRef || squadRef.characters.length >= 4) return;
+
+    // Carry over the wanderer's actual position and skills
+    const newChar = createCharacter(wanderer.id, wanderer.name, wanderer.x, wanderer.y);
+    newChar.skills = { ...wanderer.skills };
+    newChar.weapon = wanderer.weapon ? { ...wanderer.weapon } : null;
+    squadRef.addCharacter(newChar);
+
+    // Mark the live wanderer object as dead so WandererSpawner.cleanDead removes it
+    const liveWanderer = wandererSpawnerRef?.wanderers.find(w => w.id === wandererId);
+    if (liveWanderer) liveWanderer.status = 'dead';
+
+    set({ cats: state.cats - wanderer.recruitCost, wandererMenuId: null });
+  },
 }));
 
-export function syncToStore(world: World, squad: Squad): void {
+export function syncToStore(world: World, squad: Squad, wanderers: Wanderer[]): void {
   const store = useGameStore.getState();
 
   const allDead = squad.allDead();
@@ -272,12 +304,15 @@ export function syncToStore(world: World, squad: Squad): void {
     squad: squad.characters.map(c => ({ ...c, bodyParts: { ...c.bodyParts }, skills: { ...c.skills } })),
     selectedCharId: squad.selectedCharId,
     enemies: world.enemies.map(e => ({ ...e, bodyParts: { ...e.bodyParts }, skills: { ...e.skills } })),
+    wanderers: wanderers.map(w => ({ ...w, bodyParts: { ...w.bodyParts }, skills: { ...w.skills } })),
     lootContainers: [...world.lootContainers],
     gameOver: allDead,
     bounties: newBounties,
     recruits: newRecruits,
     bountyDayRefresh: newBounties !== store.bounties ? world.day : store.bountyDayRefresh,
     recruitDayRefresh: newRecruits !== store.recruits ? world.day : store.recruitDayRefresh,
+    // Mirror the first living character's isCrouching flag so the HUD stays in sync
+    isCrouching: squad.characters.find(c => c.status !== 'dead' && c.status !== 'unconscious')?.isCrouching ?? false,
   });
 }
 

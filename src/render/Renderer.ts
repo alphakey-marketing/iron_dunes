@@ -1,10 +1,10 @@
 import * as PIXI from 'pixi.js';
-import type { Character as CharData, Enemy, LootContainer, Vendor } from '../types';
+import type { Character as CharData, Enemy, LootContainer, Vendor, Wanderer } from '../types';
 import { MapRenderer } from './MapRenderer';
 import { CharRenderer } from './CharRenderer';
 import { MAP_DATA, TILE_SIZE } from '../data/map';
 
-export type EntityClickType = 'enemy' | 'loot' | 'vendor';
+export type EntityClickType = 'enemy' | 'loot' | 'vendor' | 'wanderer';
 
 export interface EntityClickEvent {
   type: EntityClickType;
@@ -27,6 +27,7 @@ export class Renderer {
   private enemiesSnapshot: Enemy[] = [];
   private lootSnapshot: LootContainer[] = [];
   private vendorsSnapshot: Vendor[] = [];
+  private wanderersSnapshot: Wanderer[] = [];
 
   constructor() {
     this.app = new PIXI.Application();
@@ -78,6 +79,15 @@ export class Renderer {
       const ey = enemy.y * TILE_SIZE;
       const dist = Math.sqrt((worldX - ex) ** 2 + (worldY - ey) ** 2);
       if (dist < CLICK_RADIUS) return { type: 'enemy', id: enemy.id };
+    }
+
+    // Wanderers are checked before loot (they're entities the player interacts with directly)
+    for (const wanderer of this.wanderersSnapshot) {
+      if (wanderer.status === 'dead') continue;
+      const wx = wanderer.x * TILE_SIZE;
+      const wy = wanderer.y * TILE_SIZE;
+      const dist = Math.sqrt((worldX - wx) ** 2 + (worldY - wy) ** 2);
+      if (dist < CLICK_RADIUS) return { type: 'wanderer', id: wanderer.id };
     }
 
     for (const container of this.lootSnapshot) {
@@ -176,6 +186,7 @@ export class Renderer {
   update(
     squad: CharData[],
     enemies: Enemy[],
+    wanderers: Wanderer[],
     loot: LootContainer[],
     vendors: Vendor[],
     selectedId: string | null,
@@ -184,6 +195,7 @@ export class Renderer {
     escortTargets: { x: number; y: number }[],
   ): void {
     this.enemiesSnapshot = enemies;
+    this.wanderersSnapshot = wanderers;
     this.lootSnapshot = loot;
     this.vendorsSnapshot = vendors;
 
@@ -195,6 +207,6 @@ export class Renderer {
     }
 
     this.applyDayNightTint(timeOfDay, isNight);
-    this.charRenderer.update(squad, enemies, loot, vendors, selectedId, escortTargets);
+    this.charRenderer.update(squad, enemies, wanderers, loot, vendors, selectedId, escortTargets);
   }
 }

@@ -16,13 +16,14 @@ import { ShopModal } from './ui/ShopModal';
 import { BountyBoard } from './ui/BountyBoard';
 import { RecruitModal } from './ui/RecruitModal';
 import { GameOver } from './ui/GameOver';
+import { WandererActionMenu } from './ui/WandererActionMenu';
 
 async function main(): Promise<void> {
   const world = new World();
   const squad = new Squad();
   const renderer = new Renderer();
 
-  setGameRefs(world, squad);
+  setGameRefs(world, squad, gameLoop.wandererSpawner);
 
   await renderer.init();
 
@@ -52,6 +53,13 @@ async function main(): Promise<void> {
       if (selectedId) {
         useGameStore.getState().openLoot(event.id, selectedId);
       }
+      return;
+    }
+
+    if (event.type === 'wanderer') {
+      // For Desperate Raiders: show Attack/Ignore menu.
+      // For Drifters/Scavengers: show Talk/Recruit/Ignore menu.
+      useGameStore.getState().openWandererMenu(event.id);
       return;
     }
 
@@ -132,6 +140,31 @@ async function main(): Promise<void> {
     if (e.code === 'KeyR') {
       useGameStore.getState().openRecruit();
     }
+    if (e.code === 'KeyC') {
+      gameLoop.toggleCrouch();
+    }
+  });
+
+  // HUD crouch button dispatches a custom event to avoid circular store dependency
+  window.addEventListener('iron-dunes:toggleCrouch', () => {
+    gameLoop.toggleCrouch();
+  });
+
+  // WandererActionMenu "Attack" button dispatches this event
+  window.addEventListener('iron-dunes:attackWanderer', (e: Event) => {
+    const detail = (e as CustomEvent<{ id: string }>).detail;
+    const state = useGameStore.getState();
+    const selectedId = state.selectedCharId;
+    if (!selectedId) return;
+    const char = squad.getById(selectedId);
+    if (!char || char.status === 'dead' || char.status === 'unconscious') return;
+    const wanderer = gameLoop.wandererSpawner.wanderers.find(w => w.id === detail.id);
+    if (!wanderer || wanderer.status === 'dead') return;
+    char.targetX = wanderer.x;
+    char.targetY = wanderer.y;
+    char.status = 'moving';
+    char.combatTarget = wanderer.id;
+    gameLoop.clearPath(char.id);
   });
 
   useGameStore.subscribe((state) => {
@@ -149,6 +182,7 @@ async function main(): Promise<void> {
     renderer.update(
       state.squad,
       state.enemies,
+      state.wanderers,
       state.lootContainers,
       state.vendors,
       state.selectedCharId,
@@ -172,6 +206,7 @@ async function main(): Promise<void> {
         React.createElement(ShopModal),
         React.createElement(BountyBoard),
         React.createElement(RecruitModal),
+        React.createElement(WandererActionMenu),
         React.createElement(GameOver),
       )
     );

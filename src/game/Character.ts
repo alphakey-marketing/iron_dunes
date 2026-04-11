@@ -39,6 +39,7 @@ export function createCharacter(id: string, name: string, x: number, y: number):
     hungerTimer: 0,
     athleticsTimer: 0,
     starvationTimer: 0,
+    isCrouching: false,
   };
 }
 
@@ -155,7 +156,7 @@ export function updateCharacter(char: CharData, delta: number): void {
     char.hunger <= 0 ? char.skills.athletics * 0.8 : char.skills.athletics,
     char.bodyParts.leftLeg,
     char.bodyParts.rightLeg
-  );
+  ) * (char.isCrouching ? 0.5 : 1.0);
 }
 
 export function useMedicalKit(char: CharData, part: keyof CharData['bodyParts']): boolean {
@@ -165,4 +166,14 @@ export function useMedicalKit(char: CharData, part: keyof CharData['bodyParts'])
   char.backpack.splice(kitIdx, 1);
   checkBodyPartEffects(char);
   return true;
+}
+
+/**
+ * Trains stealth skill while the character is crouching near an enemy (GDD §4.2 / §6.6).
+ * +0.15 XP/s while crouching within the base (un-modified) aggro radius of any enemy.
+ * @param nearEnemy Whether the character is currently within a base aggro radius.
+ */
+export function updateStealthTraining(char: CharData, nearEnemy: boolean, delta: number): void {
+  if (!char.isCrouching || !nearEnemy) return;
+  char.skills.stealth = Math.min(100, char.skills.stealth + 0.15 * delta);
 }

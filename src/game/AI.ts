@@ -19,6 +19,17 @@ function getHealthPercent(enemy: Enemy): number {
   return total / 700;
 }
 
+/**
+ * Computes the effective aggro range for detecting a specific squad member,
+ * reduced by their stealth skill and crouch state (GDD §6.6).
+ */
+export function computeEffectiveAggroRange(baseRange: number, char: CharData): number {
+  if (!char.isCrouching) return baseRange;
+  const crouchMultiplier = char.status === 'moving' ? 0.6 : 1.0;
+  const stealthFactor = (char.skills.stealth / 100) * crouchMultiplier;
+  return baseRange * (1 - stealthFactor);
+}
+
 function toCombatant(entity: Enemy | CharData): Combatant {
   return {
     id: entity.id,
@@ -217,7 +228,8 @@ export class AISystem {
     for (const char of squad) {
       if (char.status === 'dead' || char.status === 'unconscious') continue;
       const d = dist(enemy.x, enemy.y, char.x, char.y);
-      if (d <= aggroRange) return char;
+      const effectiveRange = computeEffectiveAggroRange(aggroRange, char);
+      if (d <= effectiveRange) return char;
     }
     return null;
   }
