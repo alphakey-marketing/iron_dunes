@@ -126,3 +126,14 @@ export const VENDOR_INVENTORY_IDS = [
   'cookedMeat',
   'medicalKit',
 ];
+
+export function makeCatsPouch(amount: number): Item {
+  return {
+    id: 'catsPouch',
+    name: `Cats (${amount})`,
+    type: 'currency',
+    weight: 0,
+    buyPrice: amount,
+    sellPrice: amount,
+  };
+}

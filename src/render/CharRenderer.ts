@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import type { Character as CharData, Enemy, LootContainer } from '../types';
+import type { Character as CharData, Enemy, LootContainer, Vendor, Wanderer } from '../types';
 import { TILE_SIZE } from '../data/map';
 
 const CHAR_RADIUS = 10;
@@ -9,10 +9,13 @@ const HEALTH_BAR_HEIGHT = 3;
 const COLORS = {
   player: 0x4F98A3,
   enemy: 0xE84040,
+  vendor: 0x88CCAA,
   unconscious: 0x888888,
   selected: 0xFFFF00,
   loot: 0xF0C040,
   dead: 0x444444,
+  wandererNeutral: 0xA8C5A0, // GDD §12.2
+  wandererHostile: 0xE84040, // Desperate Raiders — same red as bandits
 };
 
 interface CharSprite {
@@ -26,10 +29,13 @@ export class CharRenderer {
   private charLayer: PIXI.Container;
   private charSprites: Map<string, CharSprite> = new Map();
   private lootSprites: Map<string, PIXI.Graphics> = new Map();
+  private vendorSprites: Map<string, PIXI.Container> = new Map();
+  private escortMarkerGfx: PIXI.Graphics = new PIXI.Graphics();
 
   constructor(parent: PIXI.Container) {
     this.charLayer = new PIXI.Container();
     parent.addChild(this.charLayer);
+    this.charLayer.addChild(this.escortMarkerGfx);
   }
 
   private getOrCreateSprite(id: string): CharSprite {
@@ -58,11 +64,38 @@ export class CharRenderer {
     }
   }
 
+  private getOrCreateVendorSprite(vendor: Vendor): PIXI.Container {
+    if (this.vendorSprites.has(vendor.id)) return this.vendorSprites.get(vendor.id)!;
+
+    const container = new PIXI.Container();
+    const body = new PIXI.Graphics();
+    body.circle(0, 0, CHAR_RADIUS);
+    body.fill({ color: COLORS.vendor });
+    body.circle(0, 0, CHAR_RADIUS);
+    body.stroke({ color: 0xffffff, alpha: 0.5, width: 1.5 });
+    container.addChild(body);
+
+    const label = new PIXI.Text({
+      text: vendor.name,
+      style: { fontSize: 8, fill: 0xffffff, fontFamily: 'monospace' },
+    });
+    label.anchor.set(0.5, 0);
+    label.y = CHAR_RADIUS + 2;
+    container.addChild(label);
+
+    this.charLayer.addChild(container);
+    this.vendorSprites.set(vendor.id, container);
+    return container;
+  }
+
   update(
     squad: CharData[],
     enemies: Enemy[],
+    wanderers: Wanderer[],
     loot: LootContainer[],
-    selectedId: string | null
+    vendors: Vendor[],
+    selectedId: string | null,
+    escortTargets: { x: number; y: number }[] = [],
   ): void {
     const activeIds = new Set<string>();
 
@@ -110,6 +143,46 @@ export class CharRenderer {
       }
     }
 
+    // Render wanderers (separate from enemies — different tint per archetype)
+    for (const w of wanderers) {
+      if (w.status === 'dead') continue;
+      activeIds.add(w.id);
+      const sprite = this.getOrCreateSprite(w.id);
+      sprite.container.x = w.x * TILE_SIZE;
+      sprite.container.y = w.y * TILE_SIZE;
+
+      const baseColor = w.archetype === 'desperateRaider' ? COLORS.wandererHostile : COLORS.wandererNeutral;
+      const color = w.status === 'unconscious' ? COLORS.unconscious : baseColor;
+      sprite.circle.clear();
+      sprite.circle.circle(0, 0, CHAR_RADIUS);
+      sprite.circle.fill({ color });
+
+      const hpPct = Object.values(w.bodyParts).reduce((a, b) => a + b, 0) / 700;
+      this.drawHpBar(sprite, hpPct);
+    }
+
+    // Remove stale sprites (wanderers that were removed this frame)
+    for (const [id] of this.charSprites) {
+      if (!activeIds.has(id)) {
+        this.removeSprite(id);
+      }
+    }
+
+    // Vendor sprites (static NPCs)
+    const activeVendorIds = new Set<string>();
+    for (const vendor of vendors) {
+      activeVendorIds.add(vendor.id);
+      const sprite = this.getOrCreateVendorSprite(vendor);
+      sprite.x = vendor.x * TILE_SIZE;
+      sprite.y = vendor.y * TILE_SIZE;
+    }
+    for (const [id, sprite] of this.vendorSprites) {
+      if (!activeVendorIds.has(id)) {
+        this.charLayer.removeChild(sprite);
+        this.vendorSprites.delete(id);
+      }
+    }
+
     const activeLootIds = new Set<string>();
     for (const container of loot) {
       if (container.opened) continue;
@@ -133,6 +206,19 @@ export class CharRenderer {
         this.charLayer.removeChild(gfx);
         this.lootSprites.delete(id);
       }
+    }
+
+    // Escort bounty destination markers
+    this.escortMarkerGfx.clear();
+    for (const target of escortTargets) {
+      const wx = target.x * TILE_SIZE;
+      const wy = target.y * TILE_SIZE;
+      // Outer ring
+      this.escortMarkerGfx.circle(wx, wy, TILE_SIZE * 0.8);
+      this.escortMarkerGfx.stroke({ color: 0xf0c040, alpha: 0.8, width: 2 });
+      // Inner dot
+      this.escortMarkerGfx.circle(wx, wy, 4);
+      this.escortMarkerGfx.fill({ color: 0xf0c040, alpha: 0.9 });
     }
   }
 

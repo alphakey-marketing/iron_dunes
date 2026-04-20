@@ -19,11 +19,22 @@ function getHealthPercent(enemy: Enemy): number {
   return total / 700;
 }
 
+/**
+ * Computes the effective aggro range for detecting a specific squad member,
+ * reduced by their stealth skill and crouch state (GDD §6.6).
+ */
+export function computeEffectiveAggroRange(baseRange: number, char: CharData): number {
+  if (!char.isCrouching) return baseRange;
+  const crouchMultiplier = char.status === 'moving' ? 0.6 : 1.0;
+  const stealthFactor = (char.skills.stealth / 100) * crouchMultiplier;
+  return baseRange * (1 - stealthFactor);
+}
+
 function toCombatant(entity: Enemy | CharData): Combatant {
   return {
     id: entity.id,
-    skills: entity.skills as unknown as { melee: number; defence: number; strength: number; [key: string]: number },
-    bodyParts: entity.bodyParts,
+    skills: { ...entity.skills } as unknown as { melee: number; defence: number; strength: number; [key: string]: number },
+    bodyParts: { ...entity.bodyParts },
     weapon: entity.weapon,
     armour: entity.armour,
     status: entity.status,
@@ -63,7 +74,7 @@ export class AISystem {
         this.handleIdle(enemy, squad, aggroRange, allEnemies);
         break;
       case 'patrol':
-        this.handlePatrol(enemy, squad, aggroRange, allEnemies, delta);
+        this.handlePatrol(enemy, squad, aggroRange, allEnemies, delta, isNight);
         break;
       case 'chase':
         this.handleChase(enemy, squad, delta);
@@ -89,7 +100,8 @@ export class AISystem {
     squad: CharData[],
     aggroRange: number,
     allEnemies: Enemy[],
-    delta: number
+    delta: number,
+    isNight: boolean
   ): void {
     const target = this.findTarget(enemy, squad, aggroRange);
     if (target) {
@@ -103,7 +115,9 @@ export class AISystem {
     if (d < 0.5) {
       enemy.patrolIndex = (enemy.patrolIndex + 1) % enemy.patrolPath.length;
     } else {
-      const speed = enemy.moveSpeed * PATROL_SPEED_MOD;
+      // GDD §3.4: enemy patrol frequency reduced by 30% at night
+      const nightMod = isNight ? 0.7 : 1.0;
+      const speed = enemy.moveSpeed * PATROL_SPEED_MOD * nightMod;
       const dx = (wp.x - enemy.x) / d;
       const dy = (wp.y - enemy.y) / d;
       enemy.x += dx * speed * delta;
@@ -173,6 +187,7 @@ export class AISystem {
       // Write back mutated values
       enemy.skills.melee = enemyCombatant.skills.melee;
       enemy.bodyParts = enemyCombatant.bodyParts;
+      target.skills.melee = targetCombatant.skills.melee;
       target.skills.defence = targetCombatant.skills.defence;
       target.bodyParts = targetCombatant.bodyParts;
       applyBodyPartEffects(enemyCombatant);
@@ -189,8 +204,8 @@ export class AISystem {
 
     const d = dist(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
     if (d > 0.5) {
-      const dx = (enemy.x - enemy.spawnX) / d;
-      const dy = (enemy.y - enemy.spawnY) / d;
+      const dx = (enemy.spawnX - enemy.x) / d;
+      const dy = (enemy.spawnY - enemy.y) / d;
       enemy.x += dx * enemy.moveSpeed * delta;
       enemy.y += dy * enemy.moveSpeed * delta;
     }
@@ -205,7 +220,6 @@ export class AISystem {
       for (const part of parts) {
         enemy.bodyParts[part] = Math.min(100, enemy.bodyParts[part] + 20);
       }
-      enemy.currentHealth = Math.min(enemy.maxHealth, enemy.currentHealth + 20);
       this.fleeTimers.delete(enemy.id);
     }
   }
@@ -214,7 +228,8 @@ export class AISystem {
     for (const char of squad) {
       if (char.status === 'dead' || char.status === 'unconscious') continue;
       const d = dist(enemy.x, enemy.y, char.x, char.y);
-      if (d <= aggroRange) return char;
+      const effectiveRange = computeEffectiveAggroRange(aggroRange, char);
+      if (d <= effectiveRange) return char;
     }
     return null;
   }

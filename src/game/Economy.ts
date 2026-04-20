@@ -1,5 +1,5 @@
 import type { Vendor, Item, Character as CharData, BountyContract, Recruit, LootContainer, Enemy, Skills } from '../types';
-import { ITEMS } from '../data/items';
+import { ITEMS, makeCatsPouch } from '../data/items';
 
 let idCounter = 0;
 function genId(prefix: string): string {
@@ -47,6 +47,61 @@ export function createVendor(id: string, name: string, x: number, y: number): Ve
   };
 }
 
+export function createGeneralTrader(id: string, x: number, y: number): Vendor {
+  return {
+    id,
+    name: 'General Trader',
+    x,
+    y,
+    inventory: [
+      { ...ITEMS.driedRation },
+      { ...ITEMS.driedRation },
+      { ...ITEMS.driedRation },
+      { ...ITEMS.cactusFruit },
+      { ...ITEMS.cactusFruit },
+      { ...ITEMS.cookedMeat },
+      { ...ITEMS.cookedMeat },
+      { ...ITEMS.medicalKit },
+      { ...ITEMS.medicalKit },
+    ],
+    buys: ['weapon', 'armour', 'scrap'],
+  };
+}
+
+export function createArmourSmith(id: string, x: number, y: number): Vendor {
+  return {
+    id,
+    name: 'Armour Smith',
+    x,
+    y,
+    inventory: [
+      { ...ITEMS.leatherVest },
+      { ...ITEMS.leatherVest },
+      { ...ITEMS.dustcoat },
+      { ...ITEMS.dustcoat },
+      { ...ITEMS.ironPlate },
+    ],
+    buys: ['armour', 'scrap'],
+  };
+}
+
+export function createWeaponsDealer(id: string, x: number, y: number): Vendor {
+  return {
+    id,
+    name: 'Weapons Dealer',
+    x,
+    y,
+    inventory: [
+      { ...ITEMS.rustySword },
+      { ...ITEMS.rustySword },
+      { ...ITEMS.ironClub },
+      { ...ITEMS.shortsword },
+      { ...ITEMS.shortsword },
+    ],
+    buys: ['weapon', 'scrap'],
+  };
+}
+
 export function buyItem(vendor: Vendor, itemId: string, playerCats: number, playerBackpack: Item[]): {
   success: boolean;
   newCats: number;
@@ -79,11 +134,11 @@ export function sellItem(vendor: Vendor, item: Item, playerCats: number, playerB
   return { success: true, newCats: playerCats + item.sellPrice, message: `Sold ${item.name}` };
 }
 
-export function generateBounties(_day: number): BountyContract[] {
+export function generateBounties(day: number): BountyContract[] {
   const bountyTypes = ['banditHunt', 'campRaid', 'escort'] as const;
   return bountyTypes.map((type) => {
     const id = genId(`bounty`);
-    const reward = randInt(300, 800);
+    const reward = randInt(300 + day * 20, 800 + day * 20);
     return {
       id,
       type,
@@ -92,6 +147,7 @@ export function generateBounties(_day: number): BountyContract[] {
       targetCount: type === 'banditHunt' ? randInt(2, 5) : undefined,
       currentCount: type === 'banditHunt' ? 0 : undefined,
       completed: false,
+      accepted: false,
       targetX: type !== 'banditHunt' ? randInt(5, 58) : undefined,
       targetY: type !== 'banditHunt' ? randInt(5, 58) : undefined,
     };
@@ -116,12 +172,36 @@ export function generateRecruits(day: number): Recruit[] {
   });
 }
 
+export const BANDIT_CAMP_LOOT_RADIUS = 10;
+
+const MIN_CATS_DROP = 50;
+const MAX_CATS_DROP = 300;
+const CATS_DROP_CHANCE = 0.6;
+const STRENGTH_GAIN_PER_HEAVY_ITEM = 0.2;
+const HEAVY_ITEM_THRESHOLD = 5;
+
 export function generateEnemyLoot(enemy: Enemy): Item[] {
   const loot: Item[] = [];
   if (enemy.weapon) loot.push({ ...enemy.weapon });
   if (enemy.armour) loot.push({ ...enemy.armour });
   if (Math.random() < 0.4) loot.push({ ...ITEMS.scrapMetal });
   if (Math.random() < 0.3) loot.push({ ...ITEMS.driedRation });
+  if (Math.random() < 0.15) loot.push({ ...ITEMS.medicalKit });
+  if (Math.random() < CATS_DROP_CHANCE) {
+    const amount = MIN_CATS_DROP + Math.floor(Math.random() * (MAX_CATS_DROP - MIN_CATS_DROP + 1));
+    loot.push(makeCatsPouch(amount));
+  }
+  return loot;
+}
+
+export function generateRuinLoot(): Item[] {
+  const loot: Item[] = [];
+  const roll1 = Math.random();
+  if (roll1 < 0.4) loot.push({ ...ITEMS.driedRation });
+  if (Math.random() < 0.3) loot.push({ ...ITEMS.scrapMetal });
+  if (Math.random() < 0.15) loot.push({ ...ITEMS.medicalKit });
+  if (Math.random() < 0.1) loot.push({ ...ITEMS.rustySword });
+  if (Math.random() < 0.08) loot.push({ ...ITEMS.dustcoat });
   return loot;
 }
 
@@ -139,7 +219,14 @@ export function openLootContainer(container: LootContainer, char: CharData): Ite
   if (container.opened) return [];
   container.opened = true;
   const taken = [...container.items];
-  char.backpack.push(...taken);
   container.items = [];
+  for (const item of taken) {
+    if (item.type !== 'currency') {
+      char.backpack.push(item);
+      if (item.weight > HEAVY_ITEM_THRESHOLD) {
+        char.skills.strength = Math.min(100, char.skills.strength + STRENGTH_GAIN_PER_HEAVY_ITEM);
+      }
+    }
+  }
   return taken;
 }

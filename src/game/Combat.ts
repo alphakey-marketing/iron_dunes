@@ -49,17 +49,38 @@ export interface Combatant {
   weapon: Item | null;
   armour: Item | null;
   status: string;
+  /** 0–1 multiplier applied to skill rolls (e.g. 0.5 when starving). Default 1. */
+  skillMod?: number;
 }
 
 export function resolveCombatTick(attacker: Combatant, defender: Combatant): void {
   const weapon = getWeaponStats(attacker.weapon);
   const armour = getArmourStats(defender.armour);
 
-  const attackRoll = attacker.skills.melee + weapon.attackBonus + rand(-10, 10);
-  const defenceRoll = defender.skills.defence + armour.defenceBonus + rand(-5, 5);
+  // Body-part penalties on attacker (GDD §4.3)
+  const armCrippled = attacker.bodyParts.leftArm <= 0 || attacker.bodyParts.rightArm <= 0;
+  const armWeakened = attacker.bodyParts.leftArm < 50 || attacker.bodyParts.rightArm < 50;
+  const chestWeakened = attacker.bodyParts.chest < 50;
+
+  if (armCrippled) {
+    // Cannot attack; defender still gets a small defence tick
+    defender.skills.defence = Math.min(100, defender.skills.defence + 0.2);
+    return;
+  }
+
+  const attackerSkillMod = attacker.skillMod ?? 1.0;
+  const defenderSkillMod = defender.skillMod ?? 1.0;
+
+  const attackRoll = attacker.skills.melee * attackerSkillMod + weapon.attackBonus + rand(-10, 10);
+  const defenceRoll = defender.skills.defence * defenderSkillMod + armour.defenceBonus + rand(-5, 5);
 
   if (attackRoll > defenceRoll) {
-    const rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);
+    let rawDamage = weapon.baseDamage + (attacker.skills.melee * 0.1);
+    // Additive penalties: each weakened/crippled part reduces damage by 30% (GDD §4.3)
+    let damagePenalty = 0;
+    if (armWeakened) damagePenalty += 0.3;
+    if (chestWeakened) damagePenalty += 0.3;
+    rawDamage *= Math.max(0, 1 - damagePenalty);
     const finalDamage = rawDamage * (1 - armour.damageReduction);
     const part = randomHitLocation();
 
