@@ -9,6 +9,8 @@ const MAX_CHASE_RANGE = 20;
 const FLEE_RESET_TIME = 60;
 const COMBAT_INTERVAL = 0.5;
 const PATROL_SPEED_MOD = 0.6;
+/** Minimum distance to a flee-from target before applying movement (avoids divide-by-zero). */
+const MIN_FLEE_DISTANCE = 0.001;
 
 function dist(ax: number, ay: number, bx: number, by: number): number {
   return Math.sqrt((ax - bx) ** 2 + (ay - by) ** 2);
@@ -83,7 +85,7 @@ export class AISystem {
         this.handleAttack(enemy, squad, delta);
         break;
       case 'flee':
-        this.handleFlee(enemy, delta);
+        this.handleFlee(enemy, squad, delta);
         break;
     }
   }
@@ -197,17 +199,31 @@ export class AISystem {
     }
   }
 
-  private handleFlee(enemy: Enemy, delta: number): void {
+  private handleFlee(enemy: Enemy, squad: CharData[], delta: number): void {
     let timer = this.fleeTimers.get(enemy.id) ?? 0;
     timer += delta;
     this.fleeTimers.set(enemy.id, timer);
 
-    const d = dist(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
-    if (d > 0.5) {
-      const dx = (enemy.spawnX - enemy.x) / d;
-      const dy = (enemy.spawnY - enemy.y) / d;
-      enemy.x += dx * enemy.moveSpeed * delta;
-      enemy.y += dy * enemy.moveSpeed * delta;
+    // Flee away from the nearest living squad member; stay put if no squad
+    if (squad.length > 0) {
+      let nearestDist = Infinity;
+      let fromX = enemy.x;
+      let fromY = enemy.y;
+      for (const char of squad) {
+        const d = dist(enemy.x, enemy.y, char.x, char.y);
+        if (d < nearestDist) {
+          nearestDist = d;
+          fromX = char.x;
+          fromY = char.y;
+        }
+      }
+      const d = dist(enemy.x, enemy.y, fromX, fromY);
+      if (d > MIN_FLEE_DISTANCE) {
+        const dx = (enemy.x - fromX) / d;
+        const dy = (enemy.y - fromY) / d;
+        enemy.x += dx * enemy.moveSpeed * delta;
+        enemy.y += dy * enemy.moveSpeed * delta;
+      }
     }
 
     if (timer >= FLEE_RESET_TIME) {

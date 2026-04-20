@@ -25,12 +25,23 @@ interface CharSprite {
   hpBg: PIXI.Graphics;
 }
 
+/** Cached render state used by the dirty-flag to skip redundant Graphics redraws. */
+interface EntityRenderState {
+  status: string;
+  isSelected: boolean;
+  hpSum: number;
+  archetype?: string;
+}
+
 export class CharRenderer {
   private charLayer: PIXI.Container;
   private charSprites: Map<string, CharSprite> = new Map();
   private lootSprites: Map<string, PIXI.Graphics> = new Map();
   private vendorSprites: Map<string, PIXI.Container> = new Map();
   private escortMarkerGfx: PIXI.Graphics = new PIXI.Graphics();
+  /** Dirty-flag cache: skip Graphics.clear()+fill() when render state is unchanged. */
+  private spriteCache: Map<string, EntityRenderState> = new Map();
+  private prevEscortTargets: { x: number; y: number }[] = [];
 
   constructor(parent: PIXI.Container) {
     this.charLayer = new PIXI.Container();
@@ -61,6 +72,7 @@ export class CharRenderer {
     if (sprite) {
       this.charLayer.removeChild(sprite.container);
       this.charSprites.delete(id);
+      this.spriteCache.delete(id);
     }
   }
 
@@ -105,20 +117,25 @@ export class CharRenderer {
       sprite.container.x = char.x * TILE_SIZE;
       sprite.container.y = char.y * TILE_SIZE;
 
-      const color = char.status === 'unconscious' ? COLORS.unconscious
-        : char.status === 'dead' ? COLORS.dead
-        : COLORS.player;
+      const isSelected = char.id === selectedId;
+      const hpSum = Object.values(char.bodyParts).reduce((a, b) => a + b, 0);
+      const cached = this.spriteCache.get(char.id);
+      if (!cached || cached.status !== char.status || cached.isSelected !== isSelected || cached.hpSum !== hpSum) {
+        const color = char.status === 'unconscious' ? COLORS.unconscious
+          : char.status === 'dead' ? COLORS.dead
+          : COLORS.player;
 
-      sprite.circle.clear();
-      if (char.id === selectedId) {
-        sprite.circle.circle(0, 0, CHAR_RADIUS + 3);
-        sprite.circle.fill({ color: COLORS.selected, alpha: 0.5 });
+        sprite.circle.clear();
+        if (isSelected) {
+          sprite.circle.circle(0, 0, CHAR_RADIUS + 3);
+          sprite.circle.fill({ color: COLORS.selected, alpha: 0.5 });
+        }
+        sprite.circle.circle(0, 0, CHAR_RADIUS);
+        sprite.circle.fill({ color });
+
+        this.drawHpBar(sprite, hpSum / 700);
+        this.spriteCache.set(char.id, { status: char.status, isSelected, hpSum });
       }
-      sprite.circle.circle(0, 0, CHAR_RADIUS);
-      sprite.circle.fill({ color });
-
-      const totalHp = Object.values(char.bodyParts).reduce((a, b) => a + b, 0);
-      this.drawHpBar(sprite, totalHp / 700);
     }
 
     for (const enemy of enemies) {
@@ -128,13 +145,17 @@ export class CharRenderer {
       sprite.container.x = enemy.x * TILE_SIZE;
       sprite.container.y = enemy.y * TILE_SIZE;
 
-      const color = enemy.status === 'unconscious' ? COLORS.unconscious : COLORS.enemy;
-      sprite.circle.clear();
-      sprite.circle.circle(0, 0, CHAR_RADIUS);
-      sprite.circle.fill({ color });
+      const hpSum = Object.values(enemy.bodyParts).reduce((a, b) => a + b, 0);
+      const cached = this.spriteCache.get(enemy.id);
+      if (!cached || cached.status !== enemy.status || cached.hpSum !== hpSum) {
+        const color = enemy.status === 'unconscious' ? COLORS.unconscious : COLORS.enemy;
+        sprite.circle.clear();
+        sprite.circle.circle(0, 0, CHAR_RADIUS);
+        sprite.circle.fill({ color });
 
-      const hpPct = Object.values(enemy.bodyParts).reduce((a, b) => a + b, 0) / 700;
-      this.drawHpBar(sprite, hpPct);
+        this.drawHpBar(sprite, hpSum / 700);
+        this.spriteCache.set(enemy.id, { status: enemy.status, isSelected: false, hpSum });
+      }
     }
 
     for (const [id] of this.charSprites) {
@@ -151,14 +172,18 @@ export class CharRenderer {
       sprite.container.x = w.x * TILE_SIZE;
       sprite.container.y = w.y * TILE_SIZE;
 
-      const baseColor = w.archetype === 'desperateRaider' ? COLORS.wandererHostile : COLORS.wandererNeutral;
-      const color = w.status === 'unconscious' ? COLORS.unconscious : baseColor;
-      sprite.circle.clear();
-      sprite.circle.circle(0, 0, CHAR_RADIUS);
-      sprite.circle.fill({ color });
+      const hpSum = Object.values(w.bodyParts).reduce((a, b) => a + b, 0);
+      const cached = this.spriteCache.get(w.id);
+      if (!cached || cached.status !== w.status || cached.hpSum !== hpSum || cached.archetype !== w.archetype) {
+        const baseColor = w.archetype === 'desperateRaider' ? COLORS.wandererHostile : COLORS.wandererNeutral;
+        const color = w.status === 'unconscious' ? COLORS.unconscious : baseColor;
+        sprite.circle.clear();
+        sprite.circle.circle(0, 0, CHAR_RADIUS);
+        sprite.circle.fill({ color });
 
-      const hpPct = Object.values(w.bodyParts).reduce((a, b) => a + b, 0) / 700;
-      this.drawHpBar(sprite, hpPct);
+        this.drawHpBar(sprite, hpSum / 700);
+        this.spriteCache.set(w.id, { status: w.status, isSelected: false, hpSum, archetype: w.archetype });
+      }
     }
 
     // Remove stale sprites (wanderers that were removed this frame)
@@ -208,17 +233,27 @@ export class CharRenderer {
       }
     }
 
-    // Escort bounty destination markers
-    this.escortMarkerGfx.clear();
-    for (const target of escortTargets) {
-      const wx = target.x * TILE_SIZE;
-      const wy = target.y * TILE_SIZE;
-      // Outer ring
-      this.escortMarkerGfx.circle(wx, wy, TILE_SIZE * 0.8);
-      this.escortMarkerGfx.stroke({ color: 0xf0c040, alpha: 0.8, width: 2 });
-      // Inner dot
-      this.escortMarkerGfx.circle(wx, wy, 4);
-      this.escortMarkerGfx.fill({ color: 0xf0c040, alpha: 0.9 });
+    // Escort bounty destination markers — only redraw when targets change
+    let escortChanged = escortTargets.length !== this.prevEscortTargets.length;
+    if (!escortChanged) {
+      escortChanged = escortTargets.some((t, i) => {
+        const prev = this.prevEscortTargets[i];
+        return t.x !== prev.x || t.y !== prev.y;
+      });
+    }
+    if (escortChanged) {
+      this.escortMarkerGfx.clear();
+      for (const target of escortTargets) {
+        const wx = target.x * TILE_SIZE;
+        const wy = target.y * TILE_SIZE;
+        // Outer ring
+        this.escortMarkerGfx.circle(wx, wy, TILE_SIZE * 0.8);
+        this.escortMarkerGfx.stroke({ color: 0xf0c040, alpha: 0.8, width: 2 });
+        // Inner dot
+        this.escortMarkerGfx.circle(wx, wy, 4);
+        this.escortMarkerGfx.fill({ color: 0xf0c040, alpha: 0.9 });
+      }
+      this.prevEscortTargets = escortTargets.map(t => ({ x: t.x, y: t.y }));
     }
   }
 
