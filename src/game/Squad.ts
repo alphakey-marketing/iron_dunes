@@ -8,7 +8,7 @@ export class Squad {
   selectedCharId: string | null = null;
 
   constructor() {
-    const wanderer = createCharacter('wanderer_1', 'The Wanderer', 32, 30);
+    const wanderer = createCharacter('player_1', 'The Wanderer', 32, 30);
     this.characters.push(wanderer);
     this.selectedCharId = wanderer.id;
   }

@@ -158,12 +158,6 @@ export class CharRenderer {
       }
     }
 
-    for (const [id] of this.charSprites) {
-      if (!activeIds.has(id)) {
-        this.removeSprite(id);
-      }
-    }
-
     // Render wanderers (separate from enemies — different tint per archetype)
     for (const w of wanderers) {
       if (w.status === 'dead') continue;

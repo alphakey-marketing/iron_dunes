@@ -207,20 +207,20 @@ export class AISystem {
     // Flee away from the nearest living squad member; stay put if no squad
     if (squad.length > 0) {
       let nearestDist = Infinity;
-      let fromX = enemy.x;
-      let fromY = enemy.y;
+      let fromX = squad[0].x;
+      let fromY = squad[0].y;
       for (const char of squad) {
-        const d = dist(enemy.x, enemy.y, char.x, char.y);
-        if (d < nearestDist) {
-          nearestDist = d;
+        const charDist = dist(enemy.x, enemy.y, char.x, char.y);
+        if (charDist < nearestDist) {
+          nearestDist = charDist;
           fromX = char.x;
           fromY = char.y;
         }
       }
-      const d = dist(enemy.x, enemy.y, fromX, fromY);
-      if (d > MIN_FLEE_DISTANCE) {
-        const dx = (enemy.x - fromX) / d;
-        const dy = (enemy.y - fromY) / d;
+      const fleeD = dist(enemy.x, enemy.y, fromX, fromY);
+      if (fleeD > MIN_FLEE_DISTANCE) {
+        const dx = (enemy.x - fromX) / fleeD;
+        const dy = (enemy.y - fromY) / fleeD;
         enemy.x += dx * enemy.moveSpeed * delta;
         enemy.y += dy * enemy.moveSpeed * delta;
       }

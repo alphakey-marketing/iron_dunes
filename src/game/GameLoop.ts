@@ -34,6 +34,8 @@ export class GameLoop {
   private reportedDeadIds: Set<string> = new Set();
   /** Per-character A* waypoint queues for click-to-move. */
   private pathQueues: Map<string, Array<{ x: number; y: number }>> = new Map();
+  /** Set to true whenever game logic runs so syncToStore only deep-copies when state changed. */
+  private stateDirty: boolean = false;
 
   constructor(world: World, squad: Squad) {
     this.world = world;
@@ -136,12 +138,14 @@ export class GameLoop {
       this.trackBanditKills();
       this.checkEscortBounties();
       this.world.cleanDeadEnemies();
+      this.stateDirty = true;
     }
 
     this.uiSyncTimer += rawDelta;
     if (this.uiSyncTimer >= UI_SYNC_INTERVAL) {
       this.uiSyncTimer = 0;
-      syncToStore(this.world, this.squad, this.wandererSpawner.wanderers);
+      syncToStore(this.world, this.squad, this.wandererSpawner.wanderers, this.stateDirty);
+      this.stateDirty = false;
     }
 
     this.rafId = requestAnimationFrame(this.tick.bind(this));

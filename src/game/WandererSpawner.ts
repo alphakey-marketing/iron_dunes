@@ -73,6 +73,8 @@ export class WandererSpawner {
   wanderers: Wanderer[] = [];
 
   private respawnTimers: number[] = []; // pending respawn countdown values (seconds)
+  /** Valid edge tiles for spawning, computed once and cached. */
+  private cachedEdgeTiles: { x: number; y: number }[] | null = null;
 
   update(delta: number, world: World, squad: CharData[]): void {
     this.updateFSMs(delta, world, squad);
@@ -411,23 +413,25 @@ export class WandererSpawner {
       }
     }
 
-    // Edge spawn (respawn case): collect valid edge tiles
-    const edgeCandidates: { x: number; y: number }[] = [];
-    for (let i = 0; i < MAP_W; i++) {
-      edgeCandidates.push({ x: i, y: 0 });
-      edgeCandidates.push({ x: i, y: MAP_H - 1 });
-    }
-    for (let i = 1; i < MAP_H - 1; i++) {
-      edgeCandidates.push({ x: 0, y: i });
-      edgeCandidates.push({ x: MAP_W - 1, y: i });
+    // Edge spawn: build the candidate list once and cache it (map tiles never change at runtime)
+    if (!this.cachedEdgeTiles) {
+      const candidates: { x: number; y: number }[] = [];
+      for (let i = 0; i < MAP_W; i++) {
+        candidates.push({ x: i, y: 0 });
+        candidates.push({ x: i, y: MAP_H - 1 });
+      }
+      for (let i = 1; i < MAP_H - 1; i++) {
+        candidates.push({ x: 0, y: i });
+        candidates.push({ x: MAP_W - 1, y: i });
+      }
+      this.cachedEdgeTiles = candidates.filter(p => {
+        const biome = MAP_DATA.tiles[p.y]?.[p.x]?.biome;
+        if (biome !== 'desert' && biome !== 'ruins') return false;
+        return dist(p.x, p.y, cx, cy) >= SETTLEMENT_EXCLUSION;
+      });
     }
 
-    const valid = edgeCandidates.filter(p => {
-      const biome = MAP_DATA.tiles[p.y]?.[p.x]?.biome;
-      if (biome !== 'desert' && biome !== 'ruins') return false;
-      return dist(p.x, p.y, cx, cy) >= SETTLEMENT_EXCLUSION;
-    });
-
+    const valid = this.cachedEdgeTiles;
     if (valid.length === 0) return null;
     return valid[Math.floor(Math.random() * valid.length)];
   }

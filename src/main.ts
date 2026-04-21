@@ -174,20 +174,24 @@ async function main(): Promise<void> {
 
   gameLoop.start();
 
+  // Capture live references so renderLoop reads current positions at 60fps
+  // instead of relying on the 10Hz Zustand store snapshots.
+  const wandererSpawner = gameLoop.wandererSpawner;
+
   function renderLoop(): void {
     const state = useGameStore.getState();
     const escortTargets = state.bounties
       .filter(b => b.type === 'escort' && b.accepted && !b.completed && b.targetX !== undefined && b.targetY !== undefined)
       .map(b => ({ x: b.targetX!, y: b.targetY! }));
     renderer.update(
-      state.squad,
-      state.enemies,
-      state.wanderers,
-      state.lootContainers,
+      squad.characters,
+      world.enemies,
+      wandererSpawner.wanderers,
+      world.lootContainers,
       state.vendors,
       state.selectedCharId,
-      state.timeOfDay,
-      state.isNight,
+      world.timeOfDay,
+      world.isNight,
       escortTargets,
     );
     requestAnimationFrame(renderLoop);

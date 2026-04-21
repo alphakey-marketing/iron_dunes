@@ -285,7 +285,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   },
 }));
 
-export function syncToStore(world: World, squad: Squad, wanderers: Wanderer[]): void {
+export function syncToStore(world: World, squad: Squad, wanderers: Wanderer[], entityDirty: boolean = true): void {
   const store = useGameStore.getState();
 
   const allDead = squad.allDead();
@@ -298,16 +298,11 @@ export function syncToStore(world: World, squad: Squad, wanderers: Wanderer[]): 
     ? generateRecruits(world.day)
     : store.recruits;
 
-  useGameStore.setState({
+  const update: Partial<GameState> = {
     day: world.day,
     timeOfDay: world.timeOfDay,
     isNight: world.isNight,
-    // Deep-copy bodyParts and skills so Zustand detects changes via referential inequality
-    squad: squad.characters.map(c => ({ ...c, bodyParts: { ...c.bodyParts }, skills: { ...c.skills } })),
     selectedCharId: squad.selectedCharId,
-    enemies: world.enemies.map(e => ({ ...e, bodyParts: { ...e.bodyParts }, skills: { ...e.skills } })),
-    wanderers: wanderers.map(w => ({ ...w, bodyParts: { ...w.bodyParts }, skills: { ...w.skills } })),
-    lootContainers: [...world.lootContainers],
     gameOver: allDead,
     bounties: newBounties,
     recruits: newRecruits,
@@ -315,6 +310,16 @@ export function syncToStore(world: World, squad: Squad, wanderers: Wanderer[]): 
     recruitDayRefresh: newRecruits !== store.recruits ? world.day : store.recruitDayRefresh,
     // Mirror the first living character's isCrouching flag so the HUD stays in sync
     isCrouching: squad.characters.find(c => c.status !== 'dead' && c.status !== 'unconscious')?.isCrouching ?? false,
-  });
+  };
+
+  // Only deep-copy entity arrays (and trigger React re-renders) when game state has changed
+  if (entityDirty) {
+    update.squad = squad.characters.map(c => ({ ...c, bodyParts: { ...c.bodyParts }, skills: { ...c.skills } }));
+    update.enemies = world.enemies.map(e => ({ ...e, bodyParts: { ...e.bodyParts }, skills: { ...e.skills } }));
+    update.wanderers = wanderers.map(w => ({ ...w, bodyParts: { ...w.bodyParts }, skills: { ...w.skills } }));
+    update.lootContainers = [...world.lootContainers];
+  }
+
+  useGameStore.setState(update);
 }
 
